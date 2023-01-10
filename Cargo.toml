@@ -1,0 +1,13 @@
+[package]
+name = "bevy-tilt-five"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cxx = "1"
+libc = "0.2"
+libloading = "*"
+
+[build-dependencies]
+bindgen = "0.63"
+cxx-build = "1.0"
