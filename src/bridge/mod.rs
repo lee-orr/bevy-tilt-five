@@ -2,22 +2,50 @@ mod ffi {
     #![allow(non_upper_case_globals)]
     #![allow(non_camel_case_types)]
     #![allow(non_snake_case)]
+    #![allow(dead_code)]
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
-use std::{mem::MaybeUninit, ffi::{c_char, CString, CStr}, thread, time::Duration};
+use std::{
+    ffi::{c_char, CStr},
+    mem::MaybeUninit,
+    thread,
+    time::Duration,
+};
 
 use ffi::*;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 pub struct T5Client {
     bridge: TiltFiveNative,
     ctx: T5_Context,
 }
 
+fn op<T: FnMut() -> u32>(mut f: T) -> Result<()> {
+    #![allow(unused_assignments)]
+    let mut err = u32::MAX;
+    let mut attempts = 0;
+    loop {
+        err = f();
+        if err == 0 {
+            return Ok(());
+        } else if err == T5_ERROR_NO_SERVICE && attempts < 100 {
+            thread::sleep(Duration::from_millis(10));
+            attempts += 1;
+            continue;
+        }
+        break;
+    }
+    if err != 0 {
+        bail!("T5 Client Error: {err}");
+    } else {
+        Ok(())
+    }
+}
+
 impl T5Client {
-    pub fn new<T: Into<String>, R: Into<String>>(app: T, version: R) -> Result<T5Client> {
+    pub fn new<T: Into<String>, R: Into<String>>(_app: T, _version: R) -> Result<T5Client> {
         unsafe {
             let bridge = TiltFiveNative::new("TiltFiveNative.dll")?;
             let mut ctx = MaybeUninit::uninit();
@@ -27,11 +55,7 @@ impl T5Client {
                 sdkType: 0u8,
                 reserved: 0u64,
             };
-            let err = bridge.t5CreateContext(ctx.as_mut_ptr(), &info, 0u64 as *const u64);
-
-            if err != 0 {
-                bail!("Failed to create context, Error Code: {err}");
-            }
+            op(|| bridge.t5CreateContext(ctx.as_mut_ptr(), &info, std::ptr::null::<u64>()))?;
 
             let ctx = ctx.assume_init();
 
@@ -39,14 +63,17 @@ impl T5Client {
         }
     }
 
-    pub fn get_gameboard_size(&mut self, gameboard: T5GameboardType) -> Result<T5_GameboardSize> {
+    pub fn get_gameboard_size(&mut self, _gameboard: T5GameboardType) -> Result<T5_GameboardSize> {
         unsafe {
             let mut gameboard = MaybeUninit::uninit();
 
-            let err = self.bridge.t5GetGameboardSize(self.ctx, T5_GameboardType_kT5_GameboardType_LE, gameboard.as_mut_ptr());
-            if err != 0 {
-                bail!("Couldn't get gameboard size, Error Code: {err}");
-            }
+            op(|| {
+                self.bridge.t5GetGameboardSize(
+                    self.ctx,
+                    T5_GameboardType_kT5_GameboardType_LE,
+                    gameboard.as_mut_ptr(),
+                )
+            })?;
             let val = gameboard.assume_init();
             Ok(val)
         }
@@ -57,21 +84,10 @@ impl T5Client {
         unsafe {
             let mut buffer = [c_char::MIN; 1024];
             let mut num_glasses = 1024;
-            let mut attempts = 0;
-            let mut err = 0;
-            loop {
-                err = self.bridge.t5ListGlasses(self.ctx, buffer.as_mut_ptr(), &mut num_glasses);
-                if err == T5_ERROR_NO_SERVICE && attempts < 100 {
-                    thread::sleep(Duration::from_millis(10));
-                    attempts+= 1;
-                    continue;
-                }
-                break;
-            }
-
-            if err != 0 {
-                bail!("Couldn't get glasses list, Error Code: {err}");
-            }
+            op(|| {
+                self.bridge
+                    .t5ListGlasses(self.ctx, buffer.as_mut_ptr(), &mut num_glasses)
+            })?;
 
             let buffer = CStr::from_ptr(buffer.as_ptr());
             println!("Buffer: {buffer:?}");
@@ -96,20 +112,19 @@ pub enum T5GameboardType {
     None = 1,
     LE = 2,
     XE = 3,
-    XE_Raised = 4
+    XeRaised = 4,
 }
 
 #[cfg(test)]
 mod tests {
-    use core::num;
-    use std::mem::MaybeUninit;
+    
+    
 
-    use cxx::{CxxVector, private::c_char};
+    
 
     use crate::bridge::T5GameboardType;
 
-    use super::{ffi::*, T5Client};
-
+    use super::{T5Client};
 
     #[test]
     fn can_create_context() {
