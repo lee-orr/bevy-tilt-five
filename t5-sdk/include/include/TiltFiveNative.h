@@ -98,7 +98,7 @@ extern "C" {
 /// \retval ::T5_ERROR_STRING_OVERFLOW One or more of the provided strings is too long.
 T5_EXPORT T5_Result t5CreateContext(T5_Context* context,
                                     const T5_ClientInfo* clientInfo,
-                                    const int64_t* platformContext);
+                                    const uint64_t* platformContext);
 
 /// \brief Destroy a context object
 ///
