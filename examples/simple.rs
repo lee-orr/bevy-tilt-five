@@ -52,7 +52,19 @@ fn setup(
 }
 
 fn connect_glasses(mut egui_context: ResMut<EguiContext>, mut events: EventWriter<TiltFiveCommands>, glasses: Res<AvailableGlasses>) {
-    egui::Window::new("T5 Status").show(egui_context.ctx_mut(), |ui| {
+    let connected_glasses = glasses.glasses.iter().filter_map(|(name, val)| {
+        if let Some((_, left, right)) = val {
+            if let (Some(left), Some(right)) = (egui_context.image_id(left), egui_context.image_id(right)) {
+                Some((name, Some((left, right))))
+            } else {
+                Some((name, None))
+            }
+        } else {
+            None
+        }
+    }).collect::<Vec<_>>();
+    let ctx = egui_context.ctx_mut();
+    egui::Window::new("T5 Status").show(ctx, |ui| {
         ui.label("Available Glasses:");
         for (key, val) in glasses.glasses.iter() {
             if val.is_none() {
@@ -62,11 +74,17 @@ fn connect_glasses(mut egui_context: ResMut<EguiContext>, mut events: EventWrite
             }
         }
         ui.label("Connected Glasses:");
-        for (key, val) in glasses.glasses.iter() {
-            if val.is_some() {
-                if ui.button(key).clicked() {
-                    events.send(TiltFiveCommands::DisconnectFromGlasses(key.clone()));
-                }
+        for (key, images) in connected_glasses.iter() {
+            if let Some((left, right)) = images {
+                ui.label("left");
+                ui.image(*left, [300.0, 300.0]);
+                ui.label("right");
+                ui.image(*right, [300.0, 300.0]);
+            } else {
+                ui.label("Couldn't get image");
+            }
+            if ui.button(*key).clicked() {
+                events.send(TiltFiveCommands::DisconnectFromGlasses(key.to_string()));
             }
         }
         if ui.button("Refresh List").clicked() {

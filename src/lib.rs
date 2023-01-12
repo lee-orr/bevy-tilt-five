@@ -88,12 +88,13 @@ fn connect_to_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<Availab
                                 label: None,
                                 size: GLASSES_TEXTURE_SIZE,
                                 dimension: TextureDimension::D2,
-                                format: TextureFormat::Bgra8Unorm,
+                                format: TextureFormat::Rgba8Unorm,
                                 mip_level_count: 1,
                                 sample_count: 1,
                                 usage: TextureUsages::TEXTURE_BINDING
                                     | TextureUsages::COPY_DST
-                                    | TextureUsages::RENDER_ATTACHMENT,
+                                    | TextureUsages::RENDER_ATTACHMENT
+                                    | TextureUsages::COPY_SRC,
                             },
                             ..default()
                         };
@@ -103,12 +104,13 @@ fn connect_to_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<Availab
                                 label: None,
                                 size: GLASSES_TEXTURE_SIZE,
                                 dimension: TextureDimension::D2,
-                                format: TextureFormat::Bgra8Unorm,
+                                format: TextureFormat::Rgba8Unorm,
                                 mip_level_count: 1,
                                 sample_count: 1,
                                 usage: TextureUsages::TEXTURE_BINDING
                                     | TextureUsages::COPY_DST
-                                    | TextureUsages::RENDER_ATTACHMENT,
+                                    | TextureUsages::RENDER_ATTACHMENT
+                                    | TextureUsages::COPY_SRC,
                             },
                             ..default()
                         };
