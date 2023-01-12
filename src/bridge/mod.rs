@@ -7,7 +7,8 @@ mod ffi {
 }
 
 use std::{
-    ffi::{c_char, CStr},
+    collections::HashMap,
+    ffi::{c_char, CStr, CString},
     mem::MaybeUninit,
     thread,
     time::Duration,
@@ -18,9 +19,14 @@ use ffi::*;
 use anyhow::{bail, Result};
 
 pub struct T5Client {
+    app: String,
     bridge: TiltFiveNative,
     ctx: T5_Context,
+    glasses: HashMap<String, T5_Glasses>,
 }
+
+#[derive(Clone, Debug)]
+pub struct Glasses(String);
 
 fn op<T: FnMut() -> u32>(mut f: T) -> Result<()> {
     #![allow(unused_assignments)]
@@ -45,13 +51,17 @@ fn op<T: FnMut() -> u32>(mut f: T) -> Result<()> {
 }
 
 impl T5Client {
-    pub fn new<T: Into<String>, R: Into<String>>(_app: T, _version: R) -> Result<T5Client> {
+    pub fn new<T: Into<String>, R: Into<String>>(app: T, version: R) -> Result<T5Client> {
         unsafe {
+            let app: String = app.into();
+            let version: String = version.into();
+            let app_id = CString::new(app.clone())?;
+            let version = CString::new(version)?;
             let bridge = TiltFiveNative::new("TiltFiveNative.dll")?;
             let mut ctx = MaybeUninit::uninit();
             let info = T5_ClientInfo {
-                applicationId: "test".as_ptr() as *const i8,
-                applicationVersion: "1".as_ptr() as *const i8,
+                applicationId: app_id.as_ptr(),
+                applicationVersion: version.as_ptr(),
                 sdkType: 0u8,
                 reserved: 0u64,
             };
@@ -59,7 +69,12 @@ impl T5Client {
 
             let ctx = ctx.assume_init();
 
-            Ok(T5Client { bridge, ctx })
+            Ok(T5Client {
+                app,
+                bridge,
+                ctx,
+                glasses: Default::default(),
+            })
         }
     }
 
@@ -98,6 +113,35 @@ impl T5Client {
         }
         Ok(result)
     }
+
+    pub fn create_glasses(&mut self, glasses_id: &str) -> Result<Glasses> {
+        unsafe {
+            let id = CString::new(glasses_id)?;
+            let mut glasses = MaybeUninit::uninit();
+            op(|| {
+                self.bridge
+                    .t5CreateGlasses(self.ctx, id.as_ptr(), glasses.as_mut_ptr())
+            })?;
+
+            let value = glasses.assume_init();
+
+            let name = CString::new(format!("{} - {}", self.app, glasses_id))?;
+
+            op(|| self.bridge.t5ReserveGlasses(value, name.as_ptr()))?;
+
+            let id: String = glasses_id.to_owned();
+            self.glasses.insert(id.clone(), value);
+            Ok(Glasses(id))
+        }
+    }
+
+    pub fn release_glasses(&mut self, glasses: Glasses) -> Result<()> {
+        if let Some(glasses) = self.glasses.remove(&glasses.0) {
+            unsafe { op(|| self.bridge.t5ReleaseGlasses(glasses)) }
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl Drop for T5Client {
@@ -117,14 +161,9 @@ pub enum T5GameboardType {
 
 #[cfg(test)]
 mod tests {
-    
-    
-
-    
-
     use crate::bridge::T5GameboardType;
 
-    use super::{T5Client};
+    use super::T5Client;
 
     #[test]
     fn can_create_context() {
