@@ -10,6 +10,7 @@ fn main() {
     .add_plugin(TiltFivePlugin)
     .add_startup_system(setup)
     .add_system(connect_glasses)
+    .add_plugin(WorldInspectorPlugin)
     .run();
 }
 

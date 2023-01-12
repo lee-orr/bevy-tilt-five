@@ -1,6 +1,6 @@
 mod bridge;
 
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{prelude::*, utils::HashMap, render::{render_resource::{Extent3d, TextureDimension, TextureFormat, TextureDescriptor, TextureUsages}, camera::RenderTarget}};
 use bridge::*;
 
 pub struct TiltFivePlugin;
@@ -20,7 +20,9 @@ impl Plugin for TiltFivePlugin {
                 .insert_non_send_resource(client)
                 .add_system(check_glasses_list)
                 .add_system(connect_to_glasses)
-                .add_system(disconnect_from_glasses);
+                .add_system(disconnect_from_glasses)
+                .add_system(setup_glasses_rendering)
+                .add_system(set_glasses_position);
         }
     }
 }
@@ -33,7 +35,7 @@ pub struct BoardBundle {
 
 #[derive(Resource, Reflect, Debug, Default)]
 pub struct AvailableGlasses {
-    pub glasses: HashMap<String, Option<Entity>>,
+    pub glasses: HashMap<String, Option<(Entity, Handle<Image>, Handle<Image>)>>,
 }
 
 #[derive(Component, Default)]
@@ -54,7 +56,9 @@ pub enum TiltFiveCommands {
 }
 
 #[derive(Component)]
-struct TiltFiveGlasses(Option<Glasses>);
+struct TiltFiveGlasses(Option<(Glasses, Handle<Image>, Handle<Image>)>);
+
+pub const GLASSES_TEXTURE_SIZE: Extent3d = Extent3d { width: DEFAULT_GLASSES_WIDTH, height: DEFAULT_GLASSES_HEIGHT, depth_or_array_layers: 1 };
 
 fn check_glasses_list(mut client: NonSendMut<T5Client>, mut list: ResMut<AvailableGlasses>, mut events: EventWriter<TiltFiveClientEvent>, mut reader: EventReader<TiltFiveCommands>) {
     for evt in reader.iter() {
@@ -72,14 +76,48 @@ fn check_glasses_list(mut client: NonSendMut<T5Client>, mut list: ResMut<Availab
     }
 }
 
-fn connect_to_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<AvailableGlasses>, mut events: EventWriter<TiltFiveClientEvent>, mut reader: EventReader<TiltFiveCommands>, mut commands: Commands) {
+fn connect_to_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<AvailableGlasses>, mut events: EventWriter<TiltFiveClientEvent>, mut reader: EventReader<TiltFiveCommands>, mut commands: Commands, mut assets: ResMut<Assets<Image>>) {
     for evt in reader.iter() {
         if let TiltFiveCommands::ConnectToGlasses(glasses_id) = evt {
             if let Ok(glasses) = client.create_glasses(&glasses_id) {
                 if let Some(value) = list.glasses.get(glasses_id) {
                     if value.is_none() {
-                        let entity = commands.spawn((SpatialBundle::default(), TiltFiveGlasses(Some(glasses)))).id();
-                        list.glasses.insert(glasses_id.clone(), Some(entity));
+
+                        let mut left = Image {
+                            texture_descriptor: TextureDescriptor {
+                                label: None,
+                                size: GLASSES_TEXTURE_SIZE,
+                                dimension: TextureDimension::D2,
+                                format: TextureFormat::Bgra8Unorm,
+                                mip_level_count: 1,
+                                sample_count: 1,
+                                usage: TextureUsages::TEXTURE_BINDING
+                                    | TextureUsages::COPY_DST
+                                    | TextureUsages::RENDER_ATTACHMENT,
+                            },
+                            ..default()
+                        };
+                        left.resize(GLASSES_TEXTURE_SIZE);
+                        let mut right = Image {
+                            texture_descriptor: TextureDescriptor {
+                                label: None,
+                                size: GLASSES_TEXTURE_SIZE,
+                                dimension: TextureDimension::D2,
+                                format: TextureFormat::Bgra8Unorm,
+                                mip_level_count: 1,
+                                sample_count: 1,
+                                usage: TextureUsages::TEXTURE_BINDING
+                                    | TextureUsages::COPY_DST
+                                    | TextureUsages::RENDER_ATTACHMENT,
+                            },
+                            ..default()
+                        };
+                        right.resize(GLASSES_TEXTURE_SIZE);
+
+                        let left = assets.add(left);
+                        let right = assets.add(right);
+                        let entity = commands.spawn((SpatialBundle::default(), TiltFiveGlasses(Some((glasses, left.clone(), right.clone()))))).id();
+                        list.glasses.insert(glasses_id.clone(), Some((entity, left, right)));
                         events.send(TiltFiveClientEvent::GlassesConnected(glasses_id.clone()));
                     }
                 }
@@ -91,9 +129,9 @@ fn connect_to_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<Availab
 fn disconnect_from_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<AvailableGlasses>, mut events: EventWriter<TiltFiveClientEvent>, mut reader: EventReader<TiltFiveCommands>, mut commands: Commands, mut query: Query<&mut TiltFiveGlasses>) {
     for evt in reader.iter() {
         if let TiltFiveCommands::DisconnectFromGlasses(glasses_id) = evt {
-            if let Some(Some(entity)) = list.glasses.get(glasses_id) {
+            if let Some(Some((entity, _, _))) = list.glasses.get(glasses_id) {
                 if let Ok(mut g) = query.get_mut(*entity) {
-                    if let Some(g) = g.0.take() {
+                    if let Some((g,_,_)) = g.0.take() {
                         let _ = client.release_glasses(g);
                     }
                 }
@@ -101,6 +139,51 @@ fn disconnect_from_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<Av
             }
             list.glasses.insert(glasses_id.clone(), None);
             events.send(TiltFiveClientEvent::GlassesConnected(glasses_id.clone()));            
+        }
+    }
+}
+
+fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFiveGlasses), Added<TiltFiveGlasses>>, boards: Query<Entity, With<Board>>) {
+    if let Ok(board) = boards.get_single() {
+        for (entity, glasses ) in query.iter() {
+            if let Some((_, left, right)) = &glasses.0 {
+                commands.entity(entity).with_children(|parent| {
+                    parent.spawn(Camera3dBundle {
+                        transform: Transform::from_xyz(-0.1, 0., 0.),
+                        camera: Camera {
+                            target: RenderTarget::Image(left.clone()),
+                            ..Default::default()
+                        },
+                        projection: Projection::Perspective(PerspectiveProjection { fov: DEFAULT_GLASSES_FOV, ..Default::default() }),
+                        ..Default::default()
+                    });
+                    parent.spawn(Camera3dBundle {
+                        transform: Transform::from_xyz(0.1, 0., 0.),
+                        camera: Camera {
+                            target: RenderTarget::Image(right.clone()),
+                            ..Default::default()
+                        },
+                        projection: Projection::Perspective(PerspectiveProjection { fov: DEFAULT_GLASSES_FOV, ..Default::default() }),
+                        ..Default::default()
+                    });
+                });
+                commands.entity(board).add_child(entity);
+            }
+        }
+    }
+}
+
+fn set_glasses_position(mut glasses: Query<(&mut Transform, &TiltFiveGlasses)>, mut client: NonSendMut<T5Client>) {
+    for (mut transform, glasses) in glasses.iter_mut() {
+        if let Some((glasses,_,_)) = &glasses.0 {
+            match client.get_glasses_pose(glasses) {
+                Ok(pose) => {
+                    bevy::log::info!("Got pose!");
+                    transform.translation = Vec3::new(pose.posGLS_GBD.x, pose.posGLS_GBD.y, pose.posGLS_GBD.z);
+                    transform.rotation = Quat::from_xyzw(pose.rotToGLS_GBD.x, pose.rotToGLS_GBD.y, pose.rotToGLS_GBD.z, pose.rotToGLS_GBD.w);
+                }
+                Err(e) => bevy::log::error!("Couldn't get pose {e:?}"),
+            }
         }
     }
 }

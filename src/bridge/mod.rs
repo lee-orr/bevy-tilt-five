@@ -28,6 +28,10 @@ pub struct T5Client {
 #[derive(Clone, Debug)]
 pub struct Glasses(String);
 
+pub const DEFAULT_GLASSES_WIDTH : u32 = 1216;
+pub const DEFAULT_GLASSES_HEIGHT : u32 = 768;
+pub const DEFAULT_GLASSES_FOV : f32 = 48.0;
+
 fn op<T: FnMut() -> u32, const N: usize>(mut f: T) -> Result<()> {
     #![allow(unused_assignments)]
     let mut err = u32::MAX;
@@ -130,6 +134,7 @@ impl T5Client {
             let name = CString::new(format!("{app} - {glasses_id}"))?;
 
             op::<_,100>(|| self.bridge.t5ReserveGlasses(value, name.as_ptr()))?;
+            op::<_,100>(|| self.bridge.t5EnsureGlassesReady(value))?;
 
             let id: String = glasses_id.to_owned();
             self.glasses.insert(id.clone(), value);
@@ -142,6 +147,18 @@ impl T5Client {
             unsafe { op::<_,100>(|| self.bridge.t5ReleaseGlasses(glasses)) }
         } else {
             Ok(())
+        }
+    }
+
+    pub fn get_glasses_pose(&mut self, glasses: &Glasses) -> Result<T5_GlassesPose> {
+        if let Some(glasses) = self.glasses.get(&glasses.0) {
+            unsafe {
+                let mut pose = MaybeUninit::uninit();
+                op::<_,1>(|| self.bridge.t5GetGlassesPose(*glasses, T5_GlassesPoseUsage_kT5_GlassesPoseUsage_GlassesPresentation, pose.as_mut_ptr()))?;
+                Ok(pose.assume_init())
+            }
+        } else {
+            bail!("Couldn't find glasses");
         }
     }
 }
