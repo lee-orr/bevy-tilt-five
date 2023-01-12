@@ -28,7 +28,7 @@ pub struct T5Client {
 #[derive(Clone, Debug)]
 pub struct Glasses(String);
 
-fn op<T: FnMut() -> u32>(mut f: T) -> Result<()> {
+fn op<T: FnMut() -> u32, const N: usize>(mut f: T) -> Result<()> {
     #![allow(unused_assignments)]
     let mut err = u32::MAX;
     let mut attempts = 0;
@@ -36,7 +36,7 @@ fn op<T: FnMut() -> u32>(mut f: T) -> Result<()> {
         err = f();
         if err == 0 {
             return Ok(());
-        } else if err == T5_ERROR_NO_SERVICE && attempts < 100 {
+        } else if err == T5_ERROR_NO_SERVICE && attempts < N {
             thread::sleep(Duration::from_millis(10));
             attempts += 1;
             continue;
@@ -65,7 +65,7 @@ impl T5Client {
                 sdkType: 0u8,
                 reserved: 0u64,
             };
-            op(|| bridge.t5CreateContext(ctx.as_mut_ptr(), &info, std::ptr::null::<u64>()))?;
+            op::<_, 100>(|| bridge.t5CreateContext(ctx.as_mut_ptr(), &info, std::ptr::null::<u64>()))?;
 
             let ctx = ctx.assume_init();
 
@@ -82,7 +82,7 @@ impl T5Client {
         unsafe {
             let mut gameboard = MaybeUninit::uninit();
 
-            op(|| {
+            op::<_,100>(|| {
                 self.bridge.t5GetGameboardSize(
                     self.ctx,
                     T5_GameboardType_kT5_GameboardType_LE,
@@ -99,7 +99,7 @@ impl T5Client {
         unsafe {
             let mut buffer = [c_char::MIN; 1024];
             let mut num_glasses = 1024;
-            op(|| {
+            op::<_,1>(|| {
                 self.bridge
                     .t5ListGlasses(self.ctx, buffer.as_mut_ptr(), &mut num_glasses)
             })?;
@@ -118,16 +118,18 @@ impl T5Client {
         unsafe {
             let id = CString::new(glasses_id)?;
             let mut glasses = MaybeUninit::uninit();
-            op(|| {
+            op::<_,100>(|| {
                 self.bridge
                     .t5CreateGlasses(self.ctx, id.as_ptr(), glasses.as_mut_ptr())
             })?;
 
             let value = glasses.assume_init();
 
-            let name = CString::new(format!("{} - {}", self.app, glasses_id))?;
+            let app = &self.app;
 
-            op(|| self.bridge.t5ReserveGlasses(value, name.as_ptr()))?;
+            let name = CString::new(format!("{app} - {glasses_id}"))?;
+
+            op::<_,100>(|| self.bridge.t5ReserveGlasses(value, name.as_ptr()))?;
 
             let id: String = glasses_id.to_owned();
             self.glasses.insert(id.clone(), value);
@@ -137,7 +139,7 @@ impl T5Client {
 
     pub fn release_glasses(&mut self, glasses: Glasses) -> Result<()> {
         if let Some(glasses) = self.glasses.remove(&glasses.0) {
-            unsafe { op(|| self.bridge.t5ReleaseGlasses(glasses)) }
+            unsafe { op::<_,100>(|| self.bridge.t5ReleaseGlasses(glasses)) }
         } else {
             Ok(())
         }

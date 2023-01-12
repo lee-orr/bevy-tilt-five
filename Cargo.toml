@@ -1,14 +1,16 @@
 [package]
-name = "bevy-tilt-five"
+name = "bevy_tilt_five"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cxx = "1"
-libc = "0.2"
 libloading = "*"
 anyhow = "*"
+bevy = "*"
 
 [build-dependencies]
 bindgen = "0.63"
-cxx-build = "1.0"
+
+[dev-dependencies]
+bevy-inspector-egui = "*"
+bevy_egui = "*"
