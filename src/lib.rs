@@ -3,6 +3,8 @@ mod bridge;
 use bevy::{prelude::*, utils::HashMap, render::{render_resource::{Extent3d, TextureDimension, TextureFormat, TextureDescriptor, TextureUsages}, camera::RenderTarget}};
 use bridge::*;
 
+pub use bridge::T5GameboardType;
+
 pub struct TiltFivePlugin;
 
 impl Plugin for TiltFivePlugin {
@@ -22,7 +24,9 @@ impl Plugin for TiltFivePlugin {
                 .add_system(connect_to_glasses)
                 .add_system(disconnect_from_glasses)
                 .add_system(setup_glasses_rendering)
-                .add_system(set_glasses_position);
+                .add_system(set_glasses_position)
+                .add_system(send_glasses_frames)
+                .add_system(setup_debug_meshes);
         }
     }
 }
@@ -79,7 +83,7 @@ fn check_glasses_list(mut client: NonSendMut<T5Client>, mut list: ResMut<Availab
 fn connect_to_glasses(mut client: NonSendMut<T5Client>, mut list: ResMut<AvailableGlasses>, mut events: EventWriter<TiltFiveClientEvent>, mut reader: EventReader<TiltFiveCommands>, mut commands: Commands, mut assets: ResMut<Assets<Image>>) {
     for evt in reader.iter() {
         if let TiltFiveCommands::ConnectToGlasses(glasses_id) = evt {
-            if let Ok(glasses) = client.create_glasses(&glasses_id) {
+            if let Ok(glasses) = client.create_glasses(glasses_id) {
                 if let Some(value) = list.glasses.get(glasses_id) {
                     if value.is_none() {
 
@@ -153,6 +157,7 @@ fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFi
                     parent.spawn(Camera3dBundle {
                         transform: Transform::from_xyz(-0.1, 0., 0.),
                         camera: Camera {
+                            priority: -2,
                             target: RenderTarget::Image(left.clone()),
                             ..Default::default()
                         },
@@ -162,6 +167,7 @@ fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFi
                     parent.spawn(Camera3dBundle {
                         transform: Transform::from_xyz(0.1, 0., 0.),
                         camera: Camera {
+                            priority: -1,
                             target: RenderTarget::Image(right.clone()),
                             ..Default::default()
                         },
@@ -181,11 +187,37 @@ fn set_glasses_position(mut glasses: Query<(&mut Transform, &TiltFiveGlasses)>, 
             match client.get_glasses_pose(glasses) {
                 Ok(pose) => {
                     bevy::log::info!("Got pose!");
-                    transform.translation = Vec3::new(pose.posGLS_GBD.x, pose.posGLS_GBD.y, pose.posGLS_GBD.z);
-                    transform.rotation = Quat::from_xyzw(pose.rotToGLS_GBD.x, pose.rotToGLS_GBD.y, pose.rotToGLS_GBD.z, pose.rotToGLS_GBD.w);
+                    transform.translation = Vec3::new(pose.posGLS_GBD.x, pose.posGLS_GBD.z, -pose.posGLS_GBD.y);
+                    transform.rotation = Quat::from_xyzw(pose.rotToGLS_GBD.x, pose.rotToGLS_GBD.z, -pose.rotToGLS_GBD.y, pose.rotToGLS_GBD.w);
                 }
                 Err(e) => bevy::log::error!("Couldn't get pose {e:?}"),
             }
         }
+    }
+}
+
+fn send_glasses_frames(glasses: Query<&TiltFiveGlasses>, mut client: NonSendMut<T5Client>, images: Res<Assets<Image>>) {
+    for (glasses) in glasses.iter() {
+        if let Some((glasses,left,right)) = &glasses.0 {
+            if let Some(left) = images.get(left) {
+                bevy::log::info!("Image...");
+            }
+        }
+    }
+}
+
+fn setup_debug_meshes(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+   query: Query<Entity, Added<TiltFiveGlasses>>
+) {
+    for entity in query.iter() {
+        commands.entity(entity).with_children(|p| {
+            p.spawn(PbrBundle {
+                mesh: meshes.add(Mesh::from(shape::Cube{ size: 0.2})),
+                material: materials.add(Color::rgb(0.8, 0.1, 0.2).into()),
+                ..default()});
+        });
     }
 }

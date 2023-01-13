@@ -82,14 +82,14 @@ impl T5Client {
         }
     }
 
-    pub fn get_gameboard_size(&mut self, _gameboard: T5GameboardType) -> Result<T5_GameboardSize> {
+    pub fn get_gameboard_size(&mut self, gameboard_type: T5GameboardType) -> Result<T5_GameboardSize> {
         unsafe {
             let mut gameboard = MaybeUninit::uninit();
 
             op::<_,100>(|| {
                 self.bridge.t5GetGameboardSize(
                     self.ctx,
-                    T5_GameboardType_kT5_GameboardType_LE,
+                    gameboard_type as i32,
                     gameboard.as_mut_ptr(),
                 )
             })?;
@@ -171,6 +171,7 @@ impl Drop for T5Client {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum T5GameboardType {
     None = 1,
     LE = 2,

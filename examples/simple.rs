@@ -1,17 +1,17 @@
-use bevy::{prelude::*};
-use bevy_egui::{EguiPlugin, EguiContext};
-use bevy_inspector_egui::{quick::{WorldInspectorPlugin, ResourceInspectorPlugin}, egui};
-use bevy_tilt_five::{TiltFivePlugin, BoardBundle, AvailableGlasses, TiltFiveCommands};
+use bevy::prelude::*;
+use bevy_egui::{EguiContext, EguiPlugin};
+use bevy_inspector_egui::{egui, quick::WorldInspectorPlugin};
+use bevy_tilt_five::{AvailableGlasses, BoardBundle, TiltFiveCommands, TiltFivePlugin};
 
 fn main() {
     App::new()
-    .add_plugins(DefaultPlugins)
-    .add_plugin(EguiPlugin)
-    .add_plugin(TiltFivePlugin)
-    .add_startup_system(setup)
-    .add_system(connect_glasses)
-    .add_plugin(WorldInspectorPlugin)
-    .run();
+        .add_plugins(DefaultPlugins)
+        .add_plugin(EguiPlugin)
+        .add_plugin(TiltFivePlugin)
+        .add_startup_system(setup)
+        .add_system(connect_glasses)
+        .add_plugin(WorldInspectorPlugin)
+        .run();
 }
 
 fn setup(
@@ -51,38 +51,47 @@ fn setup(
     commands.spawn(BoardBundle::default());
 }
 
-fn connect_glasses(mut egui_context: ResMut<EguiContext>, mut events: EventWriter<TiltFiveCommands>, glasses: Res<AvailableGlasses>) {
-    let connected_glasses = glasses.glasses.iter().filter_map(|(name, val)| {
-        if let Some((_, left, right)) = val {
-            if let (Some(left), Some(right)) = (egui_context.image_id(left), egui_context.image_id(right)) {
-                Some((name, Some((left, right))))
+fn connect_glasses(
+    mut egui_context: ResMut<EguiContext>,
+    mut events: EventWriter<TiltFiveCommands>,
+    glasses: Res<AvailableGlasses>,
+) {
+    let connected_glasses = glasses
+        .glasses
+        .iter()
+        .filter_map(|(name, val)| {
+            if let Some((_, left, right)) = val {
+                Some((
+                    name,
+                    (
+                        egui_context.add_image(left.clone_weak()),
+                        egui_context.add_image(right.clone_weak()),
+                    ),
+                ))
             } else {
-                Some((name, None))
+                None
             }
-        } else {
-            None
-        }
-    }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
     let ctx = egui_context.ctx_mut();
     egui::Window::new("T5 Status").show(ctx, |ui| {
         ui.label("Available Glasses:");
         for (key, val) in glasses.glasses.iter() {
-            if val.is_none() {
-                if ui.button(key).clicked() {
-                    events.send(TiltFiveCommands::ConnectToGlasses(key.clone()));
-                }
+            if val.is_none() && ui.button(key).clicked() {
+                events.send(TiltFiveCommands::ConnectToGlasses(key.clone()));
             }
         }
         ui.label("Connected Glasses:");
         for (key, images) in connected_glasses.iter() {
-            if let Some((left, right)) = images {
+            let (left, right) = images;
+
+            ui.horizontal(|ui| {
                 ui.label("left");
-                ui.image(*left, [300.0, 300.0]);
+                ui.image(*left, [121.6, 76.8]);
                 ui.label("right");
-                ui.image(*right, [300.0, 300.0]);
-            } else {
-                ui.label("Couldn't get image");
-            }
+                ui.image(*right, [121.6, 76.8]);
+            });
+
             if ui.button(*key).clicked() {
                 events.send(TiltFiveCommands::DisconnectFromGlasses(key.to_string()));
             }
