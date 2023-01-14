@@ -40,7 +40,6 @@ impl Plugin for TiltFivePlugin {
                 client,
                 sender: event_sender,
                 receiver: command_receiver,
-                glasses: Default::default(),
             };
 
             app.insert_non_send_resource(main_app_client)
@@ -57,6 +56,7 @@ impl Plugin for TiltFivePlugin {
             let render_app = app.sub_app_mut(RenderApp);
             render_app
                 .insert_non_send_resource(render_app_client)
+                .insert_resource(T5RenderGlassesList { glasses: Default::default()})
                 .add_system_to_stage(RenderStage::Extract, get_glasses_pose)
                 .add_system_to_stage(RenderStage::Extract, process_commands);
         }
@@ -72,6 +72,10 @@ struct T5ClientRenderApp {
     client: T5Client,
     sender: Sender<TiltFiveClientEvent>,
     receiver: Receiver<TiltFiveCommands>,
+}
+
+#[derive(Resource)]
+struct T5RenderGlassesList {
     glasses: HashMap<String, (Glasses, Option<(Handle<Image>, Handle<Image>)>)>,
 }
 
@@ -121,7 +125,7 @@ fn communicate_with_client(
     }
 }
 
-fn process_commands(mut client: NonSendMut<T5ClientRenderApp>) {
+fn process_commands(mut client: NonSendMut<T5ClientRenderApp>, mut list: ResMut<T5RenderGlassesList>) {
     while let Ok(command) = client.receiver.try_recv() {
         match command {
             TiltFiveCommands::RefreshGlassesList => {
@@ -132,9 +136,9 @@ fn process_commands(mut client: NonSendMut<T5ClientRenderApp>) {
                 }
             }
             TiltFiveCommands::ConnectToGlasses(glasses_id) => {
-                if !client.glasses.contains_key(&glasses_id) {
+                if !list.glasses.contains_key(&glasses_id) {
                     if let Ok(glasses) = client.client.create_glasses(&glasses_id) {
-                        client.glasses.insert(glasses_id.clone(), (glasses, None));
+                        list.glasses.insert(glasses_id.clone(), (glasses, None));
                         let _ = client
                             .sender
                             .send(TiltFiveClientEvent::GlassesConnected(glasses_id));
@@ -142,7 +146,7 @@ fn process_commands(mut client: NonSendMut<T5ClientRenderApp>) {
                 }
             }
             TiltFiveCommands::DisconnectFromGlasses(glasses_id) => {
-                if let Some((glasses, _)) = client.glasses.remove(&glasses_id) {
+                if let Some((glasses, _)) = list.glasses.remove(&glasses_id) {
                     let _ = client.client.release_glasses(glasses);
                     let _ = client
                         .sender
@@ -285,9 +289,8 @@ fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFi
     }
 }
 
-fn get_glasses_pose(mut client: NonSendMut<T5ClientRenderApp>) {
-    let glasses = client.glasses.clone();
-    for (id, (glasses, _)) in glasses.iter() {
+fn get_glasses_pose(mut client: NonSendMut<T5ClientRenderApp>, list: Res<T5RenderGlassesList>) {
+    for (id, (glasses, _)) in list.glasses.iter() {
         match client.client.get_glasses_pose(glasses) {
             Ok(pose) => {
                 bevy::log::info!("Got pose!");
