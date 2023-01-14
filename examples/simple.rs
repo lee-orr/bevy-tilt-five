@@ -1,10 +1,14 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, render::settings::{WgpuSettings, Backends}};
 use bevy_egui::{EguiContext, EguiPlugin};
 use bevy_inspector_egui::{egui, quick::WorldInspectorPlugin};
 use bevy_tilt_five::{AvailableGlasses, BoardBundle, TiltFiveCommands, TiltFivePlugin};
 
 fn main() {
     App::new()
+        .insert_resource(WgpuSettings {
+            backends: Some(Backends::DX12),
+            ..Default::default()
+        })
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
         .add_plugin(TiltFivePlugin)
