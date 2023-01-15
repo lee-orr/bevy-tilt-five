@@ -1,4 +1,4 @@
-mod ffi {
+pub mod ffi {
     #![allow(non_upper_case_globals)]
     #![allow(non_camel_case_types)]
     #![allow(non_snake_case)]
@@ -8,7 +8,7 @@ mod ffi {
 
 use std::{
     collections::HashMap,
-    ffi::{c_char, CStr, CString},
+    ffi::{c_char, CStr, CString, c_void},
     mem::MaybeUninit,
     thread,
     time::Duration,
@@ -23,6 +23,7 @@ pub struct T5Client {
     bridge: TiltFiveNative,
     ctx: T5_Context,
     glasses: HashMap<String, T5_Glasses>,
+    graphics_context: Option<(T5_GraphicsApi, *mut c_void)>,
 }
 
 #[derive(Clone, Debug)]
@@ -78,6 +79,7 @@ impl T5Client {
                 bridge,
                 ctx,
                 glasses: Default::default(),
+                graphics_context: None
             })
         }
     }
@@ -135,6 +137,9 @@ impl T5Client {
 
             op::<_,100>(|| self.bridge.t5ReserveGlasses(value, name.as_ptr()))?;
             op::<_,100>(|| self.bridge.t5EnsureGlassesReady(value))?;
+            if let Some((api, ctx)) = &self.graphics_context {
+                op::<_,100>(|| self.bridge.t5InitGlassesGraphicsContext(value,*api, *ctx))?;
+            }
 
             let id: String = glasses_id.to_owned();
             self.glasses.insert(id.clone(), value);
@@ -160,6 +165,19 @@ impl T5Client {
         } else {
             bail!("Couldn't find glasses");
         }
+    }
+
+    pub unsafe fn send_frame_to_glasses(&mut self, id: &Glasses, info: *const T5_FrameInfo) -> Result<()> {
+        if let Some(glasses) = self.glasses.get(&id.0) {
+            println!("Sending frame to {id:?}");
+            op::<_,1>(|| self.bridge.t5SendFrameToGlasses(*glasses, info))
+        } else {
+            bail!("couldn't find glasses");
+        }
+    }
+
+    pub fn set_dx11_graphics_context(&mut self, device: *mut c_void) {
+        self.graphics_context = Some((T5_GraphicsApi_kT5_GraphicsApi_D3D11, device));
     }
 }
 

@@ -1,21 +1,26 @@
 mod bridge;
 
-use std::sync::mpsc::{channel, Receiver, Sender};
+#[cfg(target_family = "windows")]
+mod dx_11_interface;
+mod eye_clone_node;
+
+use std::{sync::mpsc::{channel, Receiver, Sender}, time::Duration};
 
 use bevy::{
     prelude::*,
     render::{
         camera::RenderTarget,
         render_resource::{
-            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, Buffer,
         },
-        RenderApp, RenderStage,
+        RenderApp, RenderStage, extract_component::ExtractComponent, extract_resource::ExtractResource, render_asset::RenderAssets, renderer::RenderDevice, main_graph::node::CAMERA_DRIVER, render_graph::RenderGraph,
     },
     utils::HashMap,
 };
-use bridge::*;
+use bridge::{*, ffi::{T5_Quat, T5_Vec3}};
 
 pub use bridge::T5GameboardType;
+use wgpu::{BufferUsages, BufferDescriptor, MapMode};
 
 pub struct TiltFivePlugin;
 
@@ -58,7 +63,19 @@ impl Plugin for TiltFivePlugin {
                 .insert_non_send_resource(render_app_client)
                 .insert_resource(T5RenderGlassesList { glasses: Default::default()})
                 .add_system_to_stage(RenderStage::Extract, get_glasses_pose)
-                .add_system_to_stage(RenderStage::Extract, process_commands);
+                .add_system_to_stage(RenderStage::Extract, process_commands)
+                .add_system_to_stage(RenderStage::Prepare, setup_buffers_for_frame)
+                .add_system_to_stage(RenderStage::Cleanup, retrieve_textures_from_gpu);
+
+            let mut graph = render_app.world.get_resource_mut::<RenderGraph>().unwrap();
+
+            graph.add_node(eye_clone_node::EYE_CLONE_NODE_NAME, eye_clone_node::EyeCloneNode::default());
+            graph.add_node_edge(CAMERA_DRIVER, eye_clone_node::EYE_CLONE_NODE_NAME).unwrap();
+
+            #[cfg(target_family = "windows")]
+            {
+                app.add_plugin(dx_11_interface::DX11Plugin);
+            }
         }
     }
 }
@@ -76,7 +93,7 @@ struct T5ClientRenderApp {
 
 #[derive(Resource)]
 struct T5RenderGlassesList {
-    glasses: HashMap<String, (Glasses, Option<(Handle<Image>, Handle<Image>)>)>,
+    glasses: HashMap<String, (Glasses, Option<(Handle<Image>, Handle<Image>)>, Option<(Buffer, Buffer)>, Option<(T5_Vec3, T5_Vec3, T5_Quat)>)>,
 }
 
 #[derive(Bundle, Default)]
@@ -85,7 +102,7 @@ pub struct BoardBundle {
     spatial: SpatialBundle,
 }
 
-#[derive(Resource, Reflect, Debug, Default)]
+#[derive(Resource, Reflect, Debug, Default, Clone, ExtractResource)]
 pub struct AvailableGlasses {
     pub glasses: HashMap<String, Option<(Entity, Handle<Image>, Handle<Image>)>>,
 }
@@ -106,18 +123,19 @@ pub enum TiltFiveCommands {
     RefreshGlassesList,
     ConnectToGlasses(String),
     DisconnectFromGlasses(String),
+    SetGlassesImages(String, Handle<Image>, Handle<Image>)
 }
 
 #[derive(Component)]
 struct TiltFiveGlasses(Option<(String, Handle<Image>, Handle<Image>)>);
 
 fn communicate_with_client(
-    mut client: NonSendMut<T5ClientMainApp>,
+    client: NonSendMut<T5ClientMainApp>,
     mut commands: EventReader<TiltFiveCommands>,
     mut events: EventWriter<TiltFiveClientEvent>,
 ) {
     for command in commands.iter() {
-        client.sender.send(command.clone());
+        let _ = client.sender.send(command.clone());
     }
 
     while let Ok(event) = client.receiver.try_recv() {
@@ -125,7 +143,8 @@ fn communicate_with_client(
     }
 }
 
-fn process_commands(mut client: NonSendMut<T5ClientRenderApp>, mut list: ResMut<T5RenderGlassesList>) {
+
+fn process_commands(mut client: NonSendMut<T5ClientRenderApp>,  mut list: ResMut<T5RenderGlassesList>, device: Res<RenderDevice>) {
     while let Ok(command) = client.receiver.try_recv() {
         match command {
             TiltFiveCommands::RefreshGlassesList => {
@@ -138,7 +157,7 @@ fn process_commands(mut client: NonSendMut<T5ClientRenderApp>, mut list: ResMut<
             TiltFiveCommands::ConnectToGlasses(glasses_id) => {
                 if !list.glasses.contains_key(&glasses_id) {
                     if let Ok(glasses) = client.client.create_glasses(&glasses_id) {
-                        list.glasses.insert(glasses_id.clone(), (glasses, None));
+                        list.glasses.insert(glasses_id.clone(), (glasses, None, None, None));
                         let _ = client
                             .sender
                             .send(TiltFiveClientEvent::GlassesConnected(glasses_id));
@@ -146,13 +165,18 @@ fn process_commands(mut client: NonSendMut<T5ClientRenderApp>, mut list: ResMut<
                 }
             }
             TiltFiveCommands::DisconnectFromGlasses(glasses_id) => {
-                if let Some((glasses, _)) = list.glasses.remove(&glasses_id) {
+                if let Some((glasses,_, _, _)) = list.glasses.remove(&glasses_id) {
                     let _ = client.client.release_glasses(glasses);
                     let _ = client
                         .sender
                         .send(TiltFiveClientEvent::GlassesDisconnected(glasses_id));
                 }
             }
+            TiltFiveCommands::SetGlassesImages(id, left, right) => {
+                if let Some(value) = list.glasses.get_mut(&id) {
+                    value.1 = Some((left, right));
+                }
+            },
         }
     }
 }
@@ -257,10 +281,10 @@ fn disconnect_from_glasses(
     }
 }
 
-fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFiveGlasses), Added<TiltFiveGlasses>>, boards: Query<Entity, With<Board>>) {
+fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFiveGlasses), Added<TiltFiveGlasses>>, boards: Query<Entity, With<Board>>, mut t5_commands: EventWriter<TiltFiveCommands>) {
     if let Ok(board) = boards.get_single() {
         for (entity, glasses ) in query.iter() {
-            if let Some((_, left, right)) = &glasses.0 {
+            if let Some((id, left, right)) = &glasses.0 {
                 commands.entity(entity).with_children(|parent| {
                     parent.spawn(Camera3dBundle {
                         transform: Transform::from_xyz(-0.1, 0., 0.),
@@ -282,6 +306,7 @@ fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFi
                         projection: Projection::Perspective(PerspectiveProjection { fov: DEFAULT_GLASSES_FOV, ..Default::default() }),
                         ..Default::default()
                     });
+                    t5_commands.send(TiltFiveCommands::SetGlassesImages(id.clone(), left.clone(), right.clone()))
                 });
                 commands.entity(board).add_child(entity);
             }
@@ -289,14 +314,24 @@ fn setup_glasses_rendering(mut commands: Commands, query: Query<(Entity, &TiltFi
     }
 }
 
-fn get_glasses_pose(mut client: NonSendMut<T5ClientRenderApp>, list: Res<T5RenderGlassesList>) {
-    for (id, (glasses, _)) in list.glasses.iter() {
-        match client.client.get_glasses_pose(glasses) {
+fn get_glasses_pose(mut client: NonSendMut<T5ClientRenderApp>, mut list: ResMut<T5RenderGlassesList>) {
+    for (id, mut value) in list.glasses.iter_mut() {
+        match client.client.get_glasses_pose(&value.0) {
             Ok(pose) => {
                 bevy::log::info!("Got pose!");
                 let pos = Vec3::new(pose.posGLS_GBD.x, pose.posGLS_GBD.z, -pose.posGLS_GBD.y);
                 let rotation = Quat::from_xyzw(pose.rotToGLS_GBD.x, pose.rotToGLS_GBD.z, -pose.rotToGLS_GBD.y, pose.rotToGLS_GBD.w);
-                client.sender.send(TiltFiveClientEvent::GlassesPoseChanged(id.clone(), Transform::from_translation(pos).with_rotation(rotation)));
+                let transform = Transform::from_translation(pos).with_rotation(rotation);
+
+                let lpos = transform.left() * 0.1 + pos;
+                let rpos = transform.right() * 0.1 + pos;
+
+                let _ = client.sender.send(TiltFiveClientEvent::GlassesPoseChanged(id.clone(), transform));
+
+                let lpos = T5_Vec3 { x: lpos.x, y: -lpos.z, z: lpos.y };
+                let rpos = T5_Vec3 { x: rpos.x, y: -rpos.z, z: rpos.y };
+
+                value.3 = Some((lpos,rpos, pose.rotToGLS_GBD.clone()));
             }
             Err(e) => bevy::log::error!("Couldn't get pose {e:?}"),
         }
@@ -341,5 +376,67 @@ fn setup_debug_meshes(
                 material: materials.add(Color::rgb(0.8, 0.1, 0.2).into()),
                 ..default()});
         });
+    }
+}
+
+struct BufferSender {
+    pub sender: Sender<(Glasses, Vec<u8>, Vec<u8>, T5_Vec3, T5_Vec3, T5_Quat)>
+}
+
+fn setup_buffers_for_frame(mut glasses: ResMut<T5RenderGlassesList>, device: Res<RenderDevice>) {
+    let padded_bytes_per_row : u64 = (RenderDevice::align_copy_bytes_per_row(DEFAULT_GLASSES_WIDTH as usize) * 4) as u64;
+    let padded_bytes_total: u64 = padded_bytes_per_row * (DEFAULT_GLASSES_HEIGHT as u64);
+    for (_, mut val) in glasses.glasses.iter_mut() {
+        if val.1.is_some() {
+            let left_buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("Left Eye Buffer"),
+                size: padded_bytes_total,
+                usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let right_buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("Right Eye Buffer"),
+                size: padded_bytes_total,
+                usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            val.2 = Some((left_buffer, right_buffer));
+        }
+    }
+}
+
+const FRAME_DURATION: Duration = Duration::from_millis(16);
+
+fn retrieve_textures_from_gpu(
+    glasses: Res<T5RenderGlassesList>,
+    device: Res<RenderDevice>,
+    buffer_sender: NonSendMut<BufferSender>
+) {
+    for (_, (glasses, images, buffers, transform)) in glasses.glasses.iter() {
+        if let (Some((lb, rb)), Some((lpos, rpos, rot))) = (buffers, transform) {
+            info!("Sending info for glasses...");
+            let ls = lb.slice(..);
+            let rs = rb.slice(..);
+
+            let (ready_sender, ready_receiver) = channel();
+
+            let l_sender = ready_sender.clone();
+            let r_seder = ready_sender.clone();
+
+            device.map_buffer(&ls, MapMode::Read,  move |_| {
+                let _ = l_sender.clone().send(true);
+            });
+            device.map_buffer(&rs, MapMode::Read,  move|_| {
+                let _ = r_seder.clone().send(true);
+            });
+
+            device.poll(wgpu::Maintain::Wait);
+
+            if let Ok(_) = ready_receiver.recv_timeout(FRAME_DURATION) {
+                if let Ok(_) = ready_receiver.recv_timeout(FRAME_DURATION)  {
+                    let _= buffer_sender.sender.send((glasses.clone(), ls.get_mapped_range().to_vec(), rs.get_mapped_range().to_vec(), lpos.clone(), rpos.clone(), rot.clone()));
+                }
+            }
+        }
     }
 }

@@ -7,6 +7,14 @@ edition = "2021"
 libloading = "*"
 anyhow = "*"
 bevy = "*"
+wgpu = "*"
+wgpu-hal = "*"
+
+windows-sys = { version = "*", features = [ "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Foundation", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common"]}
+
+winapi = { version = "*", features = ["d3d11", "dxgi", "dxgitype"]}
+futures = "0.3"
+futures-lite = "1"
 
 [build-dependencies]
 bindgen = "0.63"
