@@ -4,7 +4,6 @@ mod conversions;
 #[cfg(target_family = "windows")]
 mod dx_11_interface;
 mod eye_clone_node;
-mod ogl_interface;
 
 use std::{
     f32::consts::PI,
@@ -17,7 +16,7 @@ use bevy::{
     prelude::*,
     render::{
         camera::RenderTarget,
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
+        extract_resource::{ExtractResource},
         main_graph::node::CAMERA_DRIVER,
         render_graph::RenderGraph,
         render_resource::{
@@ -44,10 +43,8 @@ impl Plugin for TiltFivePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<TiltFiveClientEvent>()
             .add_event::<TiltFiveCommands>()
-            .init_resource::<GLS_TO_FINAL>()
             .init_resource::<AvailableGlasses>()
-            .register_type::<AvailableGlasses>()
-            .register_type::<GLS_TO_FINAL>();
+            .register_type::<AvailableGlasses>();
 
         if let Ok(client) = T5Client::new("my-app", "1") {
             println!("Setting up T5 Client");
@@ -74,8 +71,7 @@ impl Plugin for TiltFivePlugin {
                 .add_system(disconnect_from_glasses)
                 .add_system(setup_glasses_rendering)
                 .add_system(set_glasses_position)
-                .add_system(adjust_glasses_position)
-                .add_plugin(ExtractResourcePlugin::<GLS_TO_FINAL>::default());
+                .add_system(adjust_glasses_position);
 
             app.add_system(setup_debug_meshes);
 
@@ -85,7 +81,6 @@ impl Plugin for TiltFivePlugin {
                 .insert_resource(T5RenderGlassesList {
                     glasses: Default::default(),
                 })
-                .init_resource::<GLS_TO_FINAL>()
                 .add_system_to_stage(RenderStage::Extract, get_glasses_pose)
                 .add_system_to_stage(RenderStage::Extract, process_commands)
                 .add_system_to_stage(RenderStage::Prepare, setup_buffers_for_frame)
@@ -121,28 +116,16 @@ struct T5ClientRenderApp {
     receiver: Receiver<TiltFiveCommands>,
 }
 
+type GlassesMapData = (
+    Glasses,
+    Option<(Handle<Image>, Handle<Image>)>,
+    Option<(Buffer, Buffer)>,
+    Option<(T5_Vec3, T5_Vec3, T5_Quat)>,
+);
+
 #[derive(Resource)]
 struct T5RenderGlassesList {
-    glasses: HashMap<
-        String,
-        (
-            Glasses,
-            Option<(Handle<Image>, Handle<Image>)>,
-            Option<(Buffer, Buffer)>,
-            Option<(T5_Vec3, T5_Vec3, T5_Quat)>,
-        ),
-    >,
-}
-
-#[derive(Resource, Clone, Debug, Reflect, Default)]
-pub struct GLS_TO_FINAL(bool, bool, bool);
-
-impl ExtractResource for GLS_TO_FINAL {
-    type Source = Self;
-
-    fn extract_resource(source: &Self::Source) -> Self {
-        source.clone()
-    }
+    glasses: HashMap<String, GlassesMapData>,
 }
 
 #[derive(Bundle, Default)]
@@ -154,9 +137,11 @@ pub struct BoardBundle {
 #[derive(Component)]
 struct BoardTransformer;
 
+type GlassesInfo = (Entity, Handle<Image>, Handle<Image>);
+
 #[derive(Resource, Reflect, Debug, Default, Clone, ExtractResource)]
 pub struct AvailableGlasses {
-    pub glasses: HashMap<String, Option<(Entity, Handle<Image>, Handle<Image>)>>,
+    pub glasses: HashMap<String, Option<GlassesInfo>>,
 }
 
 #[derive(Component, Default)]
@@ -506,7 +491,6 @@ fn adjust_glasses_position(
 fn get_glasses_pose(
     mut client: NonSendMut<T5ClientRenderApp>,
     mut list: ResMut<T5RenderGlassesList>,
-    gls_to_final: Res<GLS_TO_FINAL>,
 ) {
     for (id, mut value) in list.glasses.iter_mut() {
         match (
@@ -514,8 +498,7 @@ fn get_glasses_pose(
             client.client.get_ipd(&value.0),
         ) {
             (Ok(pose), Ok(ipd)) => {
-                let (transform, org) =
-                    transform_matrix_from_bevy_to_glasses_space(&pose, &gls_to_final);
+                let (transform, org) = transform_matrix_from_bevy_to_glasses_space(&pose);
 
                 let lpos = org.left() * ipd + org.translation;
                 let rpos = org.right() * ipd + org.translation;
@@ -551,15 +534,12 @@ fn set_glasses_position(
     mut events: EventReader<TiltFiveClientEvent>,
 ) {
     for event in events.iter() {
-        match event {
-            TiltFiveClientEvent::GlassesPoseChanged(id, transform, ipd, _) => {
-                if let Some(Some((entity, _, _))) = list.glasses.get(id) {
-                    commands
-                        .entity(*entity)
-                        .insert((*transform, TiltFiveIPD(*ipd)));
-                }
+        if let TiltFiveClientEvent::GlassesPoseChanged(id, transform, ipd, _) = event {
+            if let Some(Some((entity, _, _))) = list.glasses.get(id) {
+                commands
+                    .entity(*entity)
+                    .insert((*transform, TiltFiveIPD(*ipd)));
             }
-            _ => {}
         }
     }
 }
@@ -579,8 +559,9 @@ fn setup_debug_meshes(
     // }
 }
 
+pub type GlassesBufferInfo = (Glasses, Vec<u8>, Vec<u8>, T5_Vec3, T5_Vec3, T5_Quat);
 struct BufferSender {
-    pub sender: Sender<(Glasses, Vec<u8>, Vec<u8>, T5_Vec3, T5_Vec3, T5_Quat)>,
+    pub sender: Sender<GlassesBufferInfo>,
 }
 
 fn setup_buffers_for_frame(mut glasses: ResMut<T5RenderGlassesList>, device: Res<RenderDevice>) {

@@ -4,7 +4,7 @@ use std::ptr::null;
 use std::sync::mpsc::{channel, Receiver};
 
 use anyhow::{bail, Result};
-use bevy::asset::FileAssetIo;
+
 
 use bevy::render::renderer::RenderDevice;
 use bevy::render::RenderStage;
@@ -23,11 +23,13 @@ use winapi::um::d3d11::{
     D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
 };
 
-use crate::bridge::ffi::{T5_FrameInfo__bindgen_ty_1, T5_Quat, T5_Vec3};
+use crate::bridge::ffi::{T5_FrameInfo__bindgen_ty_1};
 use crate::bridge::{
     self, Glasses, DEFAULT_GLASSES_FOV, DEFAULT_GLASSES_HEIGHT, DEFAULT_GLASSES_WIDTH,
 };
-use crate::{BufferSender, T5ClientRenderApp, TEXTURE_FORMAT};
+use crate::{
+    BufferSender, GlassesBufferInfo, T5ClientRenderApp, TEXTURE_FORMAT,
+};
 
 pub struct DX11Plugin;
 
@@ -75,19 +77,17 @@ fn create_dx11_device() -> Result<DX11Devices> {
         }
         Ok(DX11Devices {
             device: device.assume_init(),
-            context: context.assume_init(),
         })
     }
 }
 
 struct DX11DeviceResource {
     devices: Option<DX11Devices>,
-    receiver: Receiver<(Glasses, Vec<u8>, Vec<u8>, T5_Vec3, T5_Vec3, T5_Quat)>,
+    receiver: Receiver<GlassesBufferInfo>,
 }
 
 struct DX11Devices {
     device: *mut ID3D11Device,
-    context: *mut ID3D11DeviceContext,
 }
 
 struct DX11Buffer {
@@ -144,8 +144,6 @@ fn send_frames(
 
     if let Some(device) = &resource.devices {
         while let Ok((glasses, left, right, lpos, rpos, rot)) = resource.receiver.try_recv() {
-            save_frame_to_file(&left, &glasses, "left");
-            save_frame_to_file(&right, &glasses, "right");
             unsafe {
                 let mut left_tex = MaybeUninit::uninit();
                 let mut right_tex = MaybeUninit::uninit();
@@ -220,22 +218,5 @@ fn send_frames(
                 current_buffer.insert(glasses.clone(), (left_tex, right_tex));
             }
         }
-    }
-}
-
-fn save_frame_to_file(data: &Vec<u8>, _glasses: &Glasses, eye: &str) {
-    let mut path = FileAssetIo::get_base_path();
-
-    path.pop();
-    path.push(format!("capture_{eye}.png"));
-    info!("Capture Path: {path:?}");
-    if let Some(_buffer) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(
-        DEFAULT_GLASSES_WIDTH,
-        DEFAULT_GLASSES_HEIGHT,
-        data.clone(),
-    ) {
-        // let _ = buffer.save(path);
-    } else {
-        error!("Failed to save image");
     }
 }

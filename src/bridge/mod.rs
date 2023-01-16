@@ -87,6 +87,7 @@ impl T5Client {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_gameboard_size(
         &mut self,
         gameboard_type: T5GameboardType,

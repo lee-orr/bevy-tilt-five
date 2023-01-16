@@ -5,11 +5,11 @@ use bevy::{
 use bevy_egui::{EguiContext, EguiPlugin};
 use bevy_inspector_egui::{
     egui::{self, Ui},
-    quick::{ResourceInspectorPlugin, WorldInspectorPlugin},
+    quick::{WorldInspectorPlugin},
 };
 use bevy_tilt_five::{
     AvailableGlasses, BoardBundle, DebugGizmo, TiltFiveClientEvent, TiltFiveCommands,
-    TiltFivePlugin, GLS_TO_FINAL,
+    TiltFivePlugin,
 };
 
 fn main() {
@@ -24,7 +24,6 @@ fn main() {
         .add_startup_system(setup)
         .add_system(connect_glasses)
         .add_plugin(WorldInspectorPlugin)
-        .add_plugin(ResourceInspectorPlugin::<GLS_TO_FINAL>::default())
         .run();
 }
 
@@ -118,23 +117,20 @@ fn connect_glasses(
         }
 
         for evt in read_events.iter() {
-            match evt {
-                TiltFiveClientEvent::GlassesPoseChanged(_, t, _, o) => {
-                    let t_p = t.translation;
-                    let t_r = t.rotation;
-                    let o_p = o.translation;
-                    let o_r = o.rotation;
-                    ui.label("Current Position:");
-                    display_vec3(ui, &t_p, 1.);
-                    ui.label("Org Position:");
-                    display_vec3(ui, &o_p, 1.);
+            if let TiltFiveClientEvent::GlassesPoseChanged(_, t, _, o) = evt {
+                let t_p = t.translation;
+                let t_r = t.rotation;
+                let o_p = o.translation;
+                let o_r = o.rotation;
+                ui.label("Current Position:");
+                display_vec3(ui, &t_p, 1.);
+                ui.label("Org Position:");
+                display_vec3(ui, &o_p, 1.);
 
-                    ui.label("Current Rotation:");
-                    display_rotation(ui, &t_r);
-                    ui.label("Org Rotation:");
-                    display_rotation(ui, &o_r);
-                }
-                _ => {}
+                ui.label("Current Rotation:");
+                display_rotation(ui, &t_r);
+                ui.label("Org Rotation:");
+                display_rotation(ui, &o_r);
             }
         }
     });

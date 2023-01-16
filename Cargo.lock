@@ -828,10 +828,8 @@ dependencies = [
  "bevy-inspector-egui",
  "bevy_egui",
  "bindgen 0.63.0",
- "fermium",
  "futures",
  "futures-lite",
- "gl33",
  "image 0.24.5",
  "libloading",
  "wgpu",
@@ -1098,12 +1096,6 @@ name = "cfg_aliases"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
-
-[[package]]
-name = "chlorine"
-version = "1.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75476fe966a8af7c0ceae2a3e514afa87d4451741fcdfab8bfaa07ad301842ec"
 
 [[package]]
 name = "clang-sys"
@@ -1613,12 +1605,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fermium"
-version = "22401.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae7c97dad10911043ee521c4ff88efc96949a277133f6f7994bafe8631a76045"
-
-[[package]]
 name = "filetime"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1875,15 +1861,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "windows 0.43.0",
-]
-
-[[package]]
-name = "gl33"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29b2b7ada5ed872363f5d27e54e7cae69148cb5e4d05aa3cac1a40c30519bda3"
-dependencies = [
- "chlorine",
 ]
 
 [[package]]

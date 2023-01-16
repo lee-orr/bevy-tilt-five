@@ -15,9 +15,7 @@ windows-sys = { version = "*", features = [ "Win32_Graphics_Direct3D", "Win32_Gr
 winapi = { version = "*", features = ["d3d11", "dxgi", "dxgitype"]}
 futures = "0.3"
 futures-lite = "1"
-image = "*"
-gl33 = "*"
-fermium = "*"
+image = "0.24"
 
 [build-dependencies]
 bindgen = "0.63"
