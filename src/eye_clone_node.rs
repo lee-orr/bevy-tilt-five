@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use bevy::{render::{render_graph::Node, render_asset::{RenderAsset, RenderAssets}, texture::TextureFormatPixelInfo}, prelude::Image};
 use wgpu::{ImageCopyBuffer, ImageDataLayout, TextureFormat};
 
-use crate::{T5RenderGlassesList, bridge::{DEFAULT_GLASSES_WIDTH, DEFAULT_GLASSES_HEIGHT}, GLASSES_TEXTURE_SIZE};
+use crate::{T5RenderGlassesList, bridge::{DEFAULT_GLASSES_WIDTH, DEFAULT_GLASSES_HEIGHT}, GLASSES_TEXTURE_SIZE, TEXTURE_FORMAT};
 
 pub const EYE_CLONE_NODE_NAME : &str = "eye_clone_node";
 
@@ -20,7 +20,7 @@ impl Node for EyeCloneNode {
         world: &bevy::prelude::World,
     ) -> Result<(), bevy::render::render_graph::NodeRunError> {
         let list = world.resource::<T5RenderGlassesList>();
-        let format = TextureFormat::Rgba8Unorm;
+        let format = TEXTURE_FORMAT;
         let fmt = format.describe();
         let bytes_per_row = DEFAULT_GLASSES_WIDTH * (fmt.block_dimensions.0 as u32) * (fmt.block_size as u32);
 

@@ -4,28 +4,32 @@ use std::ptr::null;
 use std::sync::mpsc::{channel, Receiver};
 
 use anyhow::{bail, Result};
+use bevy::asset::FileAssetIo;
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::renderer::RenderDevice;
 use bevy::render::RenderStage;
+use bevy::utils::HashMap;
 use bevy::{prelude::*, render::RenderApp};
 use wgpu::{BufferDescriptor, BufferUsages, MapMode, TextureFormat};
 use winapi::shared::dxgi::IDXGIAdapter;
-use winapi::shared::dxgiformat::DXGI_FORMAT_R8G8B8A8_UNORM;
+use winapi::shared::dxgiformat::{
+    DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_UNORM, DXGI_FORMAT_R16_UNORM,
+    DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R8G8B8A8_TYPELESS,
+    DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8_UNORM,
+};
 use winapi::shared::dxgitype::DXGI_SAMPLE_DESC;
 use winapi::shared::minwindef::{HINSTANCE, HINSTANCE__, HMODULE};
 use winapi::um::d3d11::{
-    ID3D11Device, ID3D11DeviceContext, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_READ,
-    D3D11_CREATE_DEVICE_SINGLETHREADED, D3D11_SDK_VERSION, D3D11_SUBRESOURCE_DATA,
-    D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
+    ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE,
+    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_SINGLETHREADED, D3D11_SDK_VERSION,
+    D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11_USAGE_DYNAMIC,
 };
-// use windows_sys::Win32::Graphics::Direct3D::*;
-// use windows_sys::Win32::Graphics::Direct3D11::*;
-// use windows_sys::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC};
-// use windows_sys::Win32::Graphics::Dxgi::IDXGIAdapter;
 
 use crate::bridge::ffi::{T5_FrameInfo__bindgen_ty_1, T5_Quat, T5_Vec3};
-use crate::bridge::{self, Glasses, DEFAULT_GLASSES_HEIGHT, DEFAULT_GLASSES_WIDTH, DEFAULT_GLASSES_FOV};
-use crate::{BufferSender, T5ClientRenderApp, T5RenderGlassesList};
+use crate::bridge::{
+    self, Glasses, DEFAULT_GLASSES_FOV, DEFAULT_GLASSES_HEIGHT, DEFAULT_GLASSES_WIDTH,
+};
+use crate::{BufferSender, T5ClientRenderApp, T5RenderGlassesList, TEXTURE_FORMAT};
 
 pub struct DX11Plugin;
 
@@ -41,6 +45,11 @@ impl Plugin for DX11Plugin {
                 receiver,
             })
             .insert_non_send_resource(BufferSender { sender })
+            .insert_non_send_resource(DX11Buffer {
+                buffer_frame_1: HashMap::new(),
+                buffer_frame_2: HashMap::new(),
+                current_frame_is_odd: false,
+            })
             .add_system_to_stage(RenderStage::Prepare, setup_dx_11_interface)
             .add_system_to_stage(RenderStage::Extract, send_frames);
     }
@@ -83,6 +92,24 @@ struct DX11Devices {
     context: *mut ID3D11DeviceContext,
 }
 
+struct DX11Buffer {
+    buffer_frame_1: HashMap<
+        Glasses,
+        (
+            MaybeUninit<*mut ID3D11Texture2D>,
+            MaybeUninit<*mut ID3D11Texture2D>,
+        ),
+    >,
+    buffer_frame_2: HashMap<
+        Glasses,
+        (
+            MaybeUninit<*mut ID3D11Texture2D>,
+            MaybeUninit<*mut ID3D11Texture2D>,
+        ),
+    >,
+    current_frame_is_odd: bool,
+}
+
 fn setup_dx_11_interface(
     device: Res<RenderDevice>,
     mut dx11resource: NonSendMut<DX11DeviceResource>,
@@ -90,7 +117,9 @@ fn setup_dx_11_interface(
 ) {
     if dx11resource.devices.is_none() {
         if let Ok(devices) = create_dx11_device() {
-            client.client.set_dx11_graphics_context(devices.device as *mut c_void);
+            client
+                .client
+                .set_dx11_graphics_context(devices.device as *mut c_void);
             dx11resource.devices = Some(devices);
         } else {
             error!("Couldn't setup dx11 device...");
@@ -101,15 +130,24 @@ fn setup_dx_11_interface(
 fn send_frames(
     mut resource: NonSendMut<DX11DeviceResource>,
     mut client: NonSendMut<T5ClientRenderApp>,
+    mut buffer: NonSendMut<DX11Buffer>,
 ) {
-    let format = TextureFormat::Rgba8Unorm;
-    let fmt = format.describe();
+    let fmt = TEXTURE_FORMAT.describe();
     let bytes_per_row =
         DEFAULT_GLASSES_WIDTH * (fmt.block_dimensions.0 as u32) * (fmt.block_size as u32);
 
+    buffer.current_frame_is_odd = !buffer.current_frame_is_odd;
+
+    let mut current_buffer = if buffer.current_frame_is_odd {
+        &mut buffer.buffer_frame_1
+    } else {
+        &mut buffer.buffer_frame_2
+    };
+
     if let Some(device) = &resource.devices {
         while let Ok((glasses, left, right, lpos, rpos, rot)) = resource.receiver.try_recv() {
-            info!("Setting up frame to send");
+            save_frame_to_file(&left, &glasses, "left");
+            save_frame_to_file(&right, &glasses, "right");
             unsafe {
                 let mut left_tex = MaybeUninit::uninit();
                 let mut right_tex = MaybeUninit::uninit();
@@ -119,7 +157,7 @@ fn send_frames(
                     Height: DEFAULT_GLASSES_HEIGHT,
                     MipLevels: 1,
                     ArraySize: 1,
-                    Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                    Format: DXGI_FORMAT_R8G8B8A8_TYPELESS,
                     SampleDesc: DXGI_SAMPLE_DESC {
                         Count: 1,
                         Quality: 0,
@@ -151,15 +189,16 @@ fn send_frames(
                     device.CreateTexture2D(desc.as_ptr(), rdata.as_ptr(), right_tex.as_mut_ptr());
                 }
 
-                let start_y_vci = -1.0 * (DEFAULT_GLASSES_FOV * 0.5 * std::f32::consts::PI / 180.).tan();
-                let start_x_vci = start_y_vci * (DEFAULT_GLASSES_WIDTH as f32 / DEFAULT_GLASSES_HEIGHT as f32);
+                let start_y_vci =
+                    -1.0 * (DEFAULT_GLASSES_FOV * 0.5 * std::f32::consts::PI / 180.).tan();
+                let start_x_vci =
+                    start_y_vci * (DEFAULT_GLASSES_WIDTH as f32 / DEFAULT_GLASSES_HEIGHT as f32);
                 let width_vci = -2.0 * start_x_vci;
                 let height_vci = -2.0 * start_y_vci;
 
-
                 let frame_info = bridge::ffi::T5_FrameInfo {
-                    leftTexHandle: left_tex.assume_init() as *mut c_void,
-                    rightTexHandle: right_tex.assume_init() as *mut c_void,
+                    leftTexHandle: *left_tex.as_mut_ptr() as *mut c_void,
+                    rightTexHandle: *right_tex.as_mut_ptr() as *mut c_void,
                     texWidth_PIX: DEFAULT_GLASSES_WIDTH as u16,
                     texHeight_PIX: DEFAULT_GLASSES_HEIGHT as u16,
                     isSrgb: false,
@@ -179,7 +218,26 @@ fn send_frames(
                 let info = MaybeUninit::new(frame_info);
 
                 let _ = client.client.send_frame_to_glasses(&glasses, info.as_ptr());
+
+                current_buffer.insert(glasses.clone(), (left_tex, right_tex));
             }
         }
+    }
+}
+
+fn save_frame_to_file(data: &Vec<u8>, glasses: &Glasses, eye: &str) {
+    let mut path = FileAssetIo::get_base_path();
+
+    path.pop();
+    path.push(format!("capture_{eye}.png"));
+    info!("Capture Path: {path:?}");
+    if let Some(buffer) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(
+        DEFAULT_GLASSES_WIDTH,
+        DEFAULT_GLASSES_HEIGHT,
+        data.clone(),
+    ) {
+        // let _ = buffer.save(path);
+    } else {
+        error!("Failed to save image");
     }
 }

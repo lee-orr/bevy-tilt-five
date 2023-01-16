@@ -8,12 +8,13 @@ pub mod ffi {
 
 use std::{
     collections::HashMap,
-    ffi::{c_char, CStr, CString, c_void},
+    ffi::{c_char, c_void, CStr, CString},
     mem::MaybeUninit,
     thread,
     time::Duration,
 };
 
+use bevy::prelude::{Quat, Vec2, Vec3};
 use ffi::*;
 
 use anyhow::{bail, Result};
@@ -26,12 +27,12 @@ pub struct T5Client {
     graphics_context: Option<(T5_GraphicsApi, *mut c_void)>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Glasses(String);
 
-pub const DEFAULT_GLASSES_WIDTH : u32 = 1216;
-pub const DEFAULT_GLASSES_HEIGHT : u32 = 768;
-pub const DEFAULT_GLASSES_FOV : f32 = 48.0;
+pub const DEFAULT_GLASSES_WIDTH: u32 = 1216;
+pub const DEFAULT_GLASSES_HEIGHT: u32 = 768;
+pub const DEFAULT_GLASSES_FOV: f32 = 48.0;
 
 fn op<T: FnMut() -> u32, const N: usize>(mut f: T) -> Result<()> {
     #![allow(unused_assignments)]
@@ -70,7 +71,9 @@ impl T5Client {
                 sdkType: 0u8,
                 reserved: 0u64,
             };
-            op::<_, 100>(|| bridge.t5CreateContext(ctx.as_mut_ptr(), &info, std::ptr::null::<u64>()))?;
+            op::<_, 100>(|| {
+                bridge.t5CreateContext(ctx.as_mut_ptr(), &info, std::ptr::null::<u64>())
+            })?;
 
             let ctx = ctx.assume_init();
 
@@ -79,16 +82,19 @@ impl T5Client {
                 bridge,
                 ctx,
                 glasses: Default::default(),
-                graphics_context: None
+                graphics_context: None,
             })
         }
     }
 
-    pub fn get_gameboard_size(&mut self, gameboard_type: T5GameboardType) -> Result<T5_GameboardSize> {
+    pub fn get_gameboard_size(
+        &mut self,
+        gameboard_type: T5GameboardType,
+    ) -> Result<T5_GameboardSize> {
         unsafe {
             let mut gameboard = MaybeUninit::uninit();
 
-            op::<_,100>(|| {
+            op::<_, 100>(|| {
                 self.bridge.t5GetGameboardSize(
                     self.ctx,
                     gameboard_type as i32,
@@ -105,13 +111,12 @@ impl T5Client {
         unsafe {
             let mut buffer = [c_char::MIN; 1024];
             let mut num_glasses = 1024;
-            op::<_,1>(|| {
+            op::<_, 1>(|| {
                 self.bridge
                     .t5ListGlasses(self.ctx, buffer.as_mut_ptr(), &mut num_glasses)
             })?;
 
             let buffer = CStr::from_ptr(buffer.as_ptr());
-            println!("Buffer: {buffer:?}");
             let value = buffer.to_str()?;
             if !value.is_empty() {
                 result.push(value.into());
@@ -124,7 +129,7 @@ impl T5Client {
         unsafe {
             let id = CString::new(glasses_id)?;
             let mut glasses = MaybeUninit::uninit();
-            op::<_,100>(|| {
+            op::<_, 100>(|| {
                 self.bridge
                     .t5CreateGlasses(self.ctx, id.as_ptr(), glasses.as_mut_ptr())
             })?;
@@ -135,10 +140,10 @@ impl T5Client {
 
             let name = CString::new(format!("{app} - {glasses_id}"))?;
 
-            op::<_,100>(|| self.bridge.t5ReserveGlasses(value, name.as_ptr()))?;
-            op::<_,100>(|| self.bridge.t5EnsureGlassesReady(value))?;
+            op::<_, 100>(|| self.bridge.t5ReserveGlasses(value, name.as_ptr()))?;
+            op::<_, 100>(|| self.bridge.t5EnsureGlassesReady(value))?;
             if let Some((api, ctx)) = &self.graphics_context {
-                op::<_,100>(|| self.bridge.t5InitGlassesGraphicsContext(value,*api, *ctx))?;
+                op::<_, 100>(|| self.bridge.t5InitGlassesGraphicsContext(value, *api, *ctx))?;
             }
 
             let id: String = glasses_id.to_owned();
@@ -149,7 +154,7 @@ impl T5Client {
 
     pub fn release_glasses(&mut self, glasses: Glasses) -> Result<()> {
         if let Some(glasses) = self.glasses.remove(&glasses.0) {
-            unsafe { op::<_,100>(|| self.bridge.t5ReleaseGlasses(glasses)) }
+            unsafe { op::<_, 100>(|| self.bridge.t5ReleaseGlasses(glasses)) }
         } else {
             Ok(())
         }
@@ -159,7 +164,13 @@ impl T5Client {
         if let Some(glasses) = self.glasses.get(&glasses.0) {
             unsafe {
                 let mut pose = MaybeUninit::uninit();
-                op::<_,1>(|| self.bridge.t5GetGlassesPose(*glasses, T5_GlassesPoseUsage_kT5_GlassesPoseUsage_GlassesPresentation, pose.as_mut_ptr()))?;
+                op::<_, 1>(|| {
+                    self.bridge.t5GetGlassesPose(
+                        *glasses,
+                        T5_GlassesPoseUsage_kT5_GlassesPoseUsage_GlassesPresentation,
+                        pose.as_mut_ptr(),
+                    )
+                })?;
                 Ok(pose.assume_init())
             }
         } else {
@@ -167,10 +178,13 @@ impl T5Client {
         }
     }
 
-    pub unsafe fn send_frame_to_glasses(&mut self, id: &Glasses, info: *const T5_FrameInfo) -> Result<()> {
+    pub unsafe fn send_frame_to_glasses(
+        &mut self,
+        id: &Glasses,
+        info: *const T5_FrameInfo,
+    ) -> Result<()> {
         if let Some(glasses) = self.glasses.get(&id.0) {
-            println!("Sending frame to {id:?}");
-            op::<_,1>(|| self.bridge.t5SendFrameToGlasses(*glasses, info))
+            op::<_, 1>(|| self.bridge.t5SendFrameToGlasses(*glasses, info))
         } else {
             bail!("couldn't find glasses");
         }
@@ -178,6 +192,26 @@ impl T5Client {
 
     pub fn set_dx11_graphics_context(&mut self, device: *mut c_void) {
         self.graphics_context = Some((T5_GraphicsApi_kT5_GraphicsApi_D3D11, device));
+    }
+
+    pub fn get_ipd(&mut self, id: &Glasses) -> Result<f32> {
+        if let Some(glasses) = self.glasses.get(&id.0) {
+            unsafe {
+                let mut ipd = MaybeUninit::uninit();
+                op::<_, 1>(|| {
+                    self.bridge.t5GetGlassesFloatParam(
+                        *glasses,
+                        0,
+                        T5_ParamGlasses_kT5_ParamGlasses_Float_IPD,
+                        ipd.as_mut_ptr(),
+                    )
+                })?;
+                let ipd = ipd.assume_init() as f32;
+                Ok(ipd)
+            }
+        } else {
+            bail!("couldn't find glasses");
+        }
     }
 }
 
@@ -195,6 +229,54 @@ pub enum T5GameboardType {
     LE = 2,
     XE = 3,
     XeRaised = 4,
+}
+
+impl Into<Vec2> for T5_Vec2 {
+    fn into(self) -> Vec2 {
+        Vec2::new(self.x, self.y)
+    }
+}
+
+impl Into<Vec3> for T5_Vec3 {
+    fn into(self) -> Vec3 {
+        Vec3::new(self.x, self.y, self.z)
+    }
+}
+
+impl Into<Quat> for T5_Quat {
+    fn into(self) -> Quat {
+        Quat::from_xyzw(self.x, self.y, self.z, self.w)
+    }
+}
+
+impl Into<T5_Vec2> for Vec2 {
+    fn into(self) -> T5_Vec2 {
+        T5_Vec2 {
+            x: self.x,
+            y: self.y,
+        }
+    }
+}
+
+impl Into<T5_Vec3> for Vec3 {
+    fn into(self) -> T5_Vec3 {
+        T5_Vec3 {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+        }
+    }
+}
+
+impl Into<T5_Quat> for Quat {
+    fn into(self) -> T5_Quat {
+        T5_Quat {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+            w: self.w,
+        }
+    }
 }
 
 #[cfg(test)]
