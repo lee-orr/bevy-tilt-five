@@ -5,31 +5,29 @@ use std::sync::mpsc::{channel, Receiver};
 
 use anyhow::{bail, Result};
 use bevy::asset::FileAssetIo;
-use bevy::render::render_asset::RenderAssets;
+
 use bevy::render::renderer::RenderDevice;
 use bevy::render::RenderStage;
 use bevy::utils::HashMap;
 use bevy::{prelude::*, render::RenderApp};
-use wgpu::{BufferDescriptor, BufferUsages, MapMode, TextureFormat};
+
 use winapi::shared::dxgi::IDXGIAdapter;
 use winapi::shared::dxgiformat::{
-    DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_UNORM, DXGI_FORMAT_R16_UNORM,
-    DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R8G8B8A8_TYPELESS,
-    DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_R8_UNORM,
+    DXGI_FORMAT_R8G8B8A8_TYPELESS,
 };
 use winapi::shared::dxgitype::DXGI_SAMPLE_DESC;
-use winapi::shared::minwindef::{HINSTANCE, HINSTANCE__, HMODULE};
+use winapi::shared::minwindef::{HINSTANCE, HINSTANCE__};
 use winapi::um::d3d11::{
     ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE,
     D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_SINGLETHREADED, D3D11_SDK_VERSION,
-    D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11_USAGE_DYNAMIC,
+    D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
 };
 
 use crate::bridge::ffi::{T5_FrameInfo__bindgen_ty_1, T5_Quat, T5_Vec3};
 use crate::bridge::{
     self, Glasses, DEFAULT_GLASSES_FOV, DEFAULT_GLASSES_HEIGHT, DEFAULT_GLASSES_WIDTH,
 };
-use crate::{BufferSender, T5ClientRenderApp, T5RenderGlassesList, TEXTURE_FORMAT};
+use crate::{BufferSender, T5ClientRenderApp, TEXTURE_FORMAT};
 
 pub struct DX11Plugin;
 
@@ -111,7 +109,7 @@ struct DX11Buffer {
 }
 
 fn setup_dx_11_interface(
-    device: Res<RenderDevice>,
+    _device: Res<RenderDevice>,
     mut dx11resource: NonSendMut<DX11DeviceResource>,
     mut client: NonSendMut<T5ClientRenderApp>,
 ) {
@@ -128,7 +126,7 @@ fn setup_dx_11_interface(
 }
 
 fn send_frames(
-    mut resource: NonSendMut<DX11DeviceResource>,
+    resource: NonSendMut<DX11DeviceResource>,
     mut client: NonSendMut<T5ClientRenderApp>,
     mut buffer: NonSendMut<DX11Buffer>,
 ) {
@@ -138,7 +136,7 @@ fn send_frames(
 
     buffer.current_frame_is_odd = !buffer.current_frame_is_odd;
 
-    let mut current_buffer = if buffer.current_frame_is_odd {
+    let current_buffer = if buffer.current_frame_is_odd {
         &mut buffer.buffer_frame_1
     } else {
         &mut buffer.buffer_frame_2
@@ -203,7 +201,7 @@ fn send_frames(
                     texHeight_PIX: DEFAULT_GLASSES_HEIGHT as u16,
                     isSrgb: false,
                     isUpsideDown: false,
-                    rotToLVC_GBD: rot.clone(),
+                    rotToLVC_GBD: rot,
                     posLVC_GBD: lpos,
                     rotToRVC_GBD: rot,
                     posRVC_GBD: rpos,
@@ -225,13 +223,13 @@ fn send_frames(
     }
 }
 
-fn save_frame_to_file(data: &Vec<u8>, glasses: &Glasses, eye: &str) {
+fn save_frame_to_file(data: &Vec<u8>, _glasses: &Glasses, eye: &str) {
     let mut path = FileAssetIo::get_base_path();
 
     path.pop();
     path.push(format!("capture_{eye}.png"));
     info!("Capture Path: {path:?}");
-    if let Some(buffer) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(
+    if let Some(_buffer) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(
         DEFAULT_GLASSES_WIDTH,
         DEFAULT_GLASSES_HEIGHT,
         data.clone(),

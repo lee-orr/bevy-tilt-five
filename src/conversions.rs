@@ -17,7 +17,7 @@ pub fn position_t5_gameboard_to_bevy_gameboard(pos_t5_gameboard: Vec3) -> Vec3 {
 
 pub fn transform_matrix_from_bevy_to_glasses_space(
     glasses_from_gameboard: &T5_GlassesPose,
-    matrix_changer: &GLS_TO_FINAL,
+    _matrix_changer: &GLS_TO_FINAL,
 ) -> (Transform, Transform) {
     let glasses_from_gameboard_rotation: Quat = glasses_from_gameboard.rotToGLS_GBD.into();
     let glasses_from_gameboard_position: Vec3 = glasses_from_gameboard.posGLS_GBD.into();

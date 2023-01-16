@@ -1,25 +1,25 @@
-use std::ffi::c_void;
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::ptr::null;
+
+use std::mem::{MaybeUninit};
+
 use std::sync::mpsc::{channel, Receiver};
 
-use anyhow::{bail, Result};
+use anyhow::{Result};
 
 // use beryllium::*;
 use gl33::global_loader::*;
 
 use bevy::asset::FileAssetIo;
-use bevy::render::render_asset::RenderAssets;
+
 use bevy::render::renderer::RenderDevice;
 use bevy::render::RenderStage;
 use bevy::{prelude::*, render::RenderApp};
-use wgpu::{BufferDescriptor, BufferUsages, MapMode, TextureFormat};
 
-use crate::bridge::ffi::{T5_FrameInfo__bindgen_ty_1, T5_Quat, T5_Vec3};
+
+use crate::bridge::ffi::{T5_Quat, T5_Vec3};
 use crate::bridge::{
-    self, Glasses, DEFAULT_GLASSES_FOV, DEFAULT_GLASSES_HEIGHT, DEFAULT_GLASSES_WIDTH,
+    Glasses, DEFAULT_GLASSES_HEIGHT, DEFAULT_GLASSES_WIDTH,
 };
-use crate::{BufferSender, T5ClientRenderApp, T5RenderGlassesList, TEXTURE_FORMAT};
+use crate::{BufferSender, T5ClientRenderApp, TEXTURE_FORMAT};
 
 pub struct OGLPlugin;
 
@@ -90,9 +90,9 @@ struct OGLDevices {
 }
 
 fn setup_ogl_interface(
-    device: Res<RenderDevice>,
-    mut oglresource: NonSendMut<OLGDeviceResource>,
-    mut client: NonSendMut<T5ClientRenderApp>,
+    _device: Res<RenderDevice>,
+    _oglresource: NonSendMut<OLGDeviceResource>,
+    _client: NonSendMut<T5ClientRenderApp>,
 ) {
     // if oglresource.devices.is_none() {
     //     if let Ok(devices) = create_ogl_device() {
@@ -104,15 +104,15 @@ fn setup_ogl_interface(
 }
 
 fn send_frames(
-    mut resource: NonSendMut<OLGDeviceResource>,
-    mut client: NonSendMut<T5ClientRenderApp>,
+    resource: NonSendMut<OLGDeviceResource>,
+    _client: NonSendMut<T5ClientRenderApp>,
 ) {
     let fmt = TEXTURE_FORMAT.describe();
-    let bytes_per_row =
+    let _bytes_per_row =
         DEFAULT_GLASSES_WIDTH * (fmt.block_dimensions.0 as u32) * (fmt.block_size as u32);
 
     // if let Some(device) = &resource.devices {
-    while let Ok((glasses, left, right, lpos, rpos, rot)) = resource.receiver.try_recv() {
+    while let Ok((glasses, left, right, _lpos, _rpos, _rot)) = resource.receiver.try_recv() {
         save_frame_to_file(&left, &glasses, "left");
         save_frame_to_file(&right, &glasses, "right");
 
@@ -197,13 +197,13 @@ fn send_frames(
     // }
 }
 
-fn save_frame_to_file(data: &Vec<u8>, glasses: &Glasses, eye: &str) {
+fn save_frame_to_file(data: &Vec<u8>, _glasses: &Glasses, eye: &str) {
     let mut path = FileAssetIo::get_base_path();
 
     path.pop();
     path.push(format!("capture_{eye}.png"));
     info!("Capture Path: {path:?}");
-    if let Some(buffer) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(
+    if let Some(_buffer) = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(
         DEFAULT_GLASSES_WIDTH,
         DEFAULT_GLASSES_HEIGHT,
         data.clone(),

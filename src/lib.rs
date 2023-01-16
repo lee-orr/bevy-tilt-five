@@ -17,10 +17,8 @@ use bevy::{
     prelude::*,
     render::{
         camera::RenderTarget,
-        extract_component::ExtractComponent,
         extract_resource::{ExtractResource, ExtractResourcePlugin},
         main_graph::node::CAMERA_DRIVER,
-        render_asset::RenderAssets,
         render_graph::RenderGraph,
         render_resource::{
             Buffer, Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -284,7 +282,7 @@ fn communicate_with_client(
 fn process_commands(
     mut client: NonSendMut<T5ClientRenderApp>,
     mut list: ResMut<T5RenderGlassesList>,
-    device: Res<RenderDevice>,
+    _device: Res<RenderDevice>,
 ) {
     while let Ok(command) = client.receiver.try_recv() {
         match command {
@@ -540,7 +538,7 @@ fn get_glasses_pose(
                     z: rpos.z,
                 };
 
-                value.3 = Some((lpos, rpos, pose.rotToGLS_GBD.clone()));
+                value.3 = Some((lpos, rpos, pose.rotToGLS_GBD));
             }
             _ => bevy::log::error!("Couldn't get pose"),
         }
@@ -558,7 +556,7 @@ fn set_glasses_position(
                 if let Some(Some((entity, _, _))) = list.glasses.get(id) {
                     commands
                         .entity(*entity)
-                        .insert((transform.clone(), TiltFiveIPD(*ipd)));
+                        .insert((*transform, TiltFiveIPD(*ipd)));
                 }
             }
             _ => {}
@@ -567,12 +565,12 @@ fn set_glasses_position(
 }
 
 fn setup_debug_meshes(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    query: Query<Entity, Added<TiltFiveGlasses>>,
-    parents: Query<&Children, With<TiltFiveGlasses>>,
-    cameras: Query<Entity, Added<Camera3d>>,
+    _commands: Commands,
+    _meshes: ResMut<Assets<Mesh>>,
+    _materials: ResMut<Assets<StandardMaterial>>,
+    _query: Query<Entity, Added<TiltFiveGlasses>>,
+    _parents: Query<&Children, With<TiltFiveGlasses>>,
+    _cameras: Query<Entity, Added<Camera3d>>,
 ) {
     // for entity in query.iter() {
     //     commands.entity(entity).with_children(|p| {
@@ -616,7 +614,7 @@ fn retrieve_textures_from_gpu(
     device: Res<RenderDevice>,
     buffer_sender: NonSendMut<BufferSender>,
 ) {
-    for (_, (glasses, images, buffers, transform)) in glasses.glasses.iter() {
+    for (_, (glasses, _images, buffers, transform)) in glasses.glasses.iter() {
         if let (Some((lb, rb)), Some((lpos, rpos, rot))) = (buffers, transform) {
             let ls = lb.slice(..);
             let rs = rb.slice(..);
@@ -627,25 +625,23 @@ fn retrieve_textures_from_gpu(
             let r_seder = ready_sender.clone();
 
             device.map_buffer(&ls, MapMode::Read, move |_| {
-                let _ = l_sender.clone().send(true);
+                let _ = l_sender.send(true);
             });
             device.map_buffer(&rs, MapMode::Read, move |_| {
-                let _ = r_seder.clone().send(true);
+                let _ = r_seder.send(true);
             });
 
             device.poll(wgpu::Maintain::Wait);
 
-            if let Ok(_) = ready_receiver.recv_timeout(FRAME_DURATION) {
-                if let Ok(_) = ready_receiver.recv_timeout(FRAME_DURATION) {
-                    let _ = buffer_sender.sender.send((
-                        glasses.clone(),
-                        ls.get_mapped_range().to_vec(),
-                        rs.get_mapped_range().to_vec(),
-                        lpos.clone(),
-                        rpos.clone(),
-                        rot.clone(),
-                    ));
-                }
+            if ready_receiver.recv_timeout(FRAME_DURATION).is_ok() && ready_receiver.recv_timeout(FRAME_DURATION).is_ok() {
+                let _ = buffer_sender.sender.send((
+                    glasses.clone(),
+                    ls.get_mapped_range().to_vec(),
+                    rs.get_mapped_range().to_vec(),
+                    *lpos,
+                    *rpos,
+                    *rot,
+                ));
             }
         }
     }

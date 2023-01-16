@@ -231,50 +231,50 @@ pub enum T5GameboardType {
     XeRaised = 4,
 }
 
-impl Into<Vec2> for T5_Vec2 {
-    fn into(self) -> Vec2 {
-        Vec2::new(self.x, self.y)
+impl From<T5_Vec2> for Vec2 {
+    fn from(val: T5_Vec2) -> Self {
+        Vec2::new(val.x, val.y)
     }
 }
 
-impl Into<Vec3> for T5_Vec3 {
-    fn into(self) -> Vec3 {
-        Vec3::new(self.x, self.y, self.z)
+impl From<T5_Vec3> for Vec3 {
+    fn from(val: T5_Vec3) -> Self {
+        Vec3::new(val.x, val.y, val.z)
     }
 }
 
-impl Into<Quat> for T5_Quat {
-    fn into(self) -> Quat {
-        Quat::from_xyzw(self.x, self.y, self.z, self.w)
+impl From<T5_Quat> for Quat {
+    fn from(val: T5_Quat) -> Self {
+        Quat::from_xyzw(val.x, val.y, val.z, val.w)
     }
 }
 
-impl Into<T5_Vec2> for Vec2 {
-    fn into(self) -> T5_Vec2 {
+impl From<Vec2> for T5_Vec2 {
+    fn from(val: Vec2) -> Self {
         T5_Vec2 {
-            x: self.x,
-            y: self.y,
+            x: val.x,
+            y: val.y,
         }
     }
 }
 
-impl Into<T5_Vec3> for Vec3 {
-    fn into(self) -> T5_Vec3 {
+impl From<Vec3> for T5_Vec3 {
+    fn from(val: Vec3) -> Self {
         T5_Vec3 {
-            x: self.x,
-            y: self.y,
-            z: self.z,
+            x: val.x,
+            y: val.y,
+            z: val.z,
         }
     }
 }
 
-impl Into<T5_Quat> for Quat {
-    fn into(self) -> T5_Quat {
+impl From<Quat> for T5_Quat {
+    fn from(val: Quat) -> Self {
         T5_Quat {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-            w: self.w,
+            x: val.x,
+            y: val.y,
+            z: val.z,
+            w: val.w,
         }
     }
 }
