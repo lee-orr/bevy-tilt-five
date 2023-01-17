@@ -252,10 +252,7 @@ impl From<T5_Quat> for Quat {
 
 impl From<Vec2> for T5_Vec2 {
     fn from(val: Vec2) -> Self {
-        T5_Vec2 {
-            x: val.x,
-            y: val.y,
-        }
+        T5_Vec2 { x: val.x, y: val.y }
     }
 }
 

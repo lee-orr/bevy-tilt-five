@@ -42,7 +42,7 @@ fn setup(
 
     // Gizmo
     commands.spawn((
-        SpatialBundle::from_transform(Transform::from_xyz(2.2, 0., 0.)),
+        SpatialBundle::from_transform(Transform::from_scale(0.2 * Vec3::ONE)),
         DebugGizmo(Color::RED),
     ));
 

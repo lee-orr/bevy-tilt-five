@@ -5,16 +5,13 @@ use std::sync::mpsc::{channel, Receiver};
 
 use anyhow::{bail, Result};
 
-
 use bevy::render::renderer::RenderDevice;
 use bevy::render::RenderStage;
 use bevy::utils::HashMap;
 use bevy::{prelude::*, render::RenderApp};
 
 use winapi::shared::dxgi::IDXGIAdapter;
-use winapi::shared::dxgiformat::{
-    DXGI_FORMAT_R8G8B8A8_TYPELESS,
-};
+use winapi::shared::dxgiformat::DXGI_FORMAT_R8G8B8A8_TYPELESS;
 use winapi::shared::dxgitype::DXGI_SAMPLE_DESC;
 use winapi::shared::minwindef::{HINSTANCE, HINSTANCE__};
 use winapi::um::d3d11::{
@@ -23,13 +20,11 @@ use winapi::um::d3d11::{
     D3D11_SUBRESOURCE_DATA, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
 };
 
-use crate::bridge::ffi::{T5_FrameInfo__bindgen_ty_1};
+use crate::bridge::ffi::T5_FrameInfo__bindgen_ty_1;
 use crate::bridge::{
     self, Glasses, DEFAULT_GLASSES_FOV, DEFAULT_GLASSES_HEIGHT, DEFAULT_GLASSES_WIDTH,
 };
-use crate::{
-    BufferSender, GlassesBufferInfo, T5ClientRenderApp, TEXTURE_FORMAT,
-};
+use crate::{BufferSender, GlassesBufferInfo, T5ClientRenderApp, TEXTURE_FORMAT};
 
 pub struct DX11Plugin;
 
@@ -198,7 +193,7 @@ fn send_frames(
                     texWidth_PIX: DEFAULT_GLASSES_WIDTH as u16,
                     texHeight_PIX: DEFAULT_GLASSES_HEIGHT as u16,
                     isSrgb: false,
-                    isUpsideDown: false,
+                    isUpsideDown: true,
                     rotToLVC_GBD: rot,
                     posLVC_GBD: lpos,
                     rotToRVC_GBD: rot,

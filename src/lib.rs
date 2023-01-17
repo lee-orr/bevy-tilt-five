@@ -144,8 +144,14 @@ pub struct AvailableGlasses {
     pub glasses: HashMap<String, Option<GlassesInfo>>,
 }
 
-#[derive(Component, Default)]
-pub struct Board;
+#[derive(Component)]
+pub struct Board(f32);
+
+impl Default for Board {
+    fn default() -> Self {
+        Self(1.)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum TiltFiveClientEvent {
@@ -177,15 +183,15 @@ fn setup_board_transformer(mut commands: Commands, boards: Query<Entity, Added<B
         commands.entity(entity).with_children(|p| {
             p.spawn((BoardTransformer, SpatialBundle::default()))
                 .with_children(|p| {
-                    p.spawn((
-                        SpatialBundle {
-                            transform: Transform::from_rotation(Quat::from_rotation_x(
-                                -90f32.to_radians(),
-                            )),
-                            ..Default::default()
-                        },
-                        DebugGizmo(Color::BLACK),
-                    ));
+                    // p.spawn((
+                    //     SpatialBundle {
+                    //         transform: Transform::from_rotation(Quat::from_rotation_x(
+                    //             -90f32.to_radians(),
+                    //         )),
+                    //         ..Default::default()
+                    //     },
+                    //     DebugGizmo(Color::BLACK),
+                    // ));
                 });
         });
     }
@@ -423,7 +429,7 @@ fn setup_glasses_rendering(
                     parent.spawn((
                         Camera3dBundle {
                             transform: Transform::from_xyz(-0.1, 0., 0.)
-                                .with_rotation(Quat::from_rotation_x(PI)),
+                                .with_rotation(Quat::from_euler(EulerRot::XYZ, PI, 0., 0.)),
                             camera: Camera {
                                 priority: -2,
                                 target: RenderTarget::Image(left.clone()),
@@ -434,7 +440,7 @@ fn setup_glasses_rendering(
                                 deband_dither: true,
                             },
                             projection: Projection::Perspective(PerspectiveProjection {
-                                fov: DEFAULT_GLASSES_FOV,
+                                fov: DEFAULT_GLASSES_FOV.to_radians(),
                                 ..Default::default()
                             }),
                             ..Default::default()
@@ -445,7 +451,7 @@ fn setup_glasses_rendering(
                     parent.spawn((
                         Camera3dBundle {
                             transform: Transform::from_xyz(0.1, 0., 0.)
-                                .with_rotation(Quat::from_rotation_x(PI)),
+                                .with_rotation(Quat::from_euler(EulerRot::XYZ, PI, 0., 0.)),
                             camera: Camera {
                                 priority: -1,
                                 target: RenderTarget::Image(right.clone()),
@@ -453,7 +459,7 @@ fn setup_glasses_rendering(
                                 ..Default::default()
                             },
                             projection: Projection::Perspective(PerspectiveProjection {
-                                fov: DEFAULT_GLASSES_FOV,
+                                fov: DEFAULT_GLASSES_FOV.to_radians(),
                                 ..Default::default()
                             }),
                             tonemapping: Tonemapping::Enabled {
@@ -502,6 +508,7 @@ fn get_glasses_pose(
             (Ok(pose), Ok(ipd)) => {
                 let (transform, org) = transform_matrix_from_bevy_to_glasses_space(&pose);
 
+                let ipd = ipd * 0.001;
                 let lpos = org.left() * ipd + org.translation;
                 let rpos = org.right() * ipd + org.translation;
 
@@ -547,16 +554,14 @@ fn set_glasses_position(
 }
 
 fn setup_debug_meshes(mut commands: Commands, query: Query<Entity, Added<TiltFiveGlasses>>) {
-    for entity in query.iter() {
-        commands.entity(entity).with_children(|p| {
-            p.spawn((
-                SpatialBundle::from_transform(
-                    Transform::from_scale(Vec3::ONE * 0.2).with_translation(Vec3::Z * -1.),
-                ),
-                DebugGizmo(Color::YELLOW),
-            ));
-        });
-    }
+    // for entity in query.iter() {
+    //     commands.entity(entity).with_children(|p| {
+    //         p.spawn((
+    //             SpatialBundle::from_transform(Transform::from_scale(Vec3::ONE * 0.2)),
+    //             DebugGizmo(Color::YELLOW),
+    //         ));
+    //     });
+    // }
 }
 
 pub type GlassesBufferInfo = (Glasses, Vec<u8>, Vec<u8>, T5_Vec3, T5_Vec3, T5_Quat);
