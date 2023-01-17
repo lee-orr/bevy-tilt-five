@@ -16,7 +16,7 @@ use bevy::{
     prelude::*,
     render::{
         camera::RenderTarget,
-        extract_resource::{ExtractResource},
+        extract_resource::ExtractResource,
         main_graph::node::CAMERA_DRIVER,
         render_graph::RenderGraph,
         render_resource::{
@@ -175,16 +175,18 @@ pub struct DebugGizmo(pub Color);
 fn setup_board_transformer(mut commands: Commands, boards: Query<Entity, Added<Board>>) {
     for entity in boards.iter() {
         commands.entity(entity).with_children(|p| {
-            p.spawn((
-                BoardTransformer,
-                SpatialBundle {
-                    transform: Transform::from_rotation(Quat::from_rotation_x(-90f32.to_radians())),
-                    ..Default::default()
-                },
-            ))
-            .with_children(|p| {
-                p.spawn((SpatialBundle::default(), DebugGizmo(Color::BLACK)));
-            });
+            p.spawn((BoardTransformer, SpatialBundle::default()))
+                .with_children(|p| {
+                    p.spawn((
+                        SpatialBundle {
+                            transform: Transform::from_rotation(Quat::from_rotation_x(
+                                -90f32.to_radians(),
+                            )),
+                            ..Default::default()
+                        },
+                        DebugGizmo(Color::BLACK),
+                    ));
+                });
         });
     }
 }
@@ -544,19 +546,17 @@ fn set_glasses_position(
     }
 }
 
-fn setup_debug_meshes(
-    _commands: Commands,
-    _meshes: ResMut<Assets<Mesh>>,
-    _materials: ResMut<Assets<StandardMaterial>>,
-    _query: Query<Entity, Added<TiltFiveGlasses>>,
-    _parents: Query<&Children, With<TiltFiveGlasses>>,
-    _cameras: Query<Entity, Added<Camera3d>>,
-) {
-    // for entity in query.iter() {
-    //     commands.entity(entity).with_children(|p| {
-    //         p.spawn((SpatialBundle::default(), DebugGizmo(Color::YELLOW)));
-    //     });
-    // }
+fn setup_debug_meshes(mut commands: Commands, query: Query<Entity, Added<TiltFiveGlasses>>) {
+    for entity in query.iter() {
+        commands.entity(entity).with_children(|p| {
+            p.spawn((
+                SpatialBundle::from_transform(
+                    Transform::from_scale(Vec3::ONE * 0.2).with_translation(Vec3::Z * -1.),
+                ),
+                DebugGizmo(Color::YELLOW),
+            ));
+        });
+    }
 }
 
 pub type GlassesBufferInfo = (Glasses, Vec<u8>, Vec<u8>, T5_Vec3, T5_Vec3, T5_Quat);
@@ -614,7 +614,9 @@ fn retrieve_textures_from_gpu(
 
             device.poll(wgpu::Maintain::Wait);
 
-            if ready_receiver.recv_timeout(FRAME_DURATION).is_ok() && ready_receiver.recv_timeout(FRAME_DURATION).is_ok() {
+            if ready_receiver.recv_timeout(FRAME_DURATION).is_ok()
+                && ready_receiver.recv_timeout(FRAME_DURATION).is_ok()
+            {
                 let _ = buffer_sender.sender.send((
                     glasses.clone(),
                     ls.get_mapped_range().to_vec(),

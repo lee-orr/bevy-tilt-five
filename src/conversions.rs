@@ -17,11 +17,14 @@ pub fn transform_matrix_from_bevy_to_glasses_space(
         Transform::from_translation(glasses_from_gameboard_position)
             .with_rotation(glasses_from_gameboard_rotation);
 
+    let transform_from_world_to_gameboard =
+        Transform::from_rotation(Quat::from_rotation_x(-PI / 2.));
+
     let conversion = Quat::from_rotation_x(PI);
     let rotation = conversion * glasses_from_gameboard_rotation;
     let rotation = rotation.conjugate();
-    let transform =
-        Transform::from_rotation(rotation).with_translation(glasses_from_gameboard_position);
+    let transform = transform_from_world_to_gameboard
+        * Transform::from_rotation(rotation).with_translation(glasses_from_gameboard_position);
 
     (transform, transform_from_gameboard_to_glasses)
 }

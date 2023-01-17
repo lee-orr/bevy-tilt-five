@@ -5,7 +5,7 @@ use bevy::{
 use bevy_egui::{EguiContext, EguiPlugin};
 use bevy_inspector_egui::{
     egui::{self, Ui},
-    quick::{WorldInspectorPlugin},
+    quick::WorldInspectorPlugin,
 };
 use bevy_tilt_five::{
     AvailableGlasses, BoardBundle, DebugGizmo, TiltFiveClientEvent, TiltFiveCommands,
@@ -18,6 +18,7 @@ fn main() {
             backends: Some(Backends::DX12),
             ..Default::default()
         })
+        .insert_resource(ClearColor(Color::BLACK))
         .add_plugins(DefaultPlugins)
         .add_plugin(EguiPlugin)
         .add_plugin(TiltFivePlugin)
@@ -35,7 +36,7 @@ fn setup(
     // plane
     commands.spawn(PbrBundle {
         mesh: meshes.add(Mesh::from(shape::Plane { size: 5.0 })),
-        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+        material: materials.add(Color::rgb(0.6, 0.9, 0.5).into()),
         ..default()
     });
 
