@@ -13,5 +13,5 @@ The library itself is dual licensed under either:
 - MIT license
 - Apache license
 
-However, the Tilt Five provided files from their SDK are licensed under a separate Apache license, which can be found in [./t5-sdk/Readme and License.md]. This covers everything within the t5-sdk folder, as well as the `TiltFiveNative.dll` in the root of the repository.
+However, the Tilt Five provided files from their SDK are licensed under a separate Apache license, which can be found in [./t5-sdk/readme.txt]. This covers everything within the t5-sdk folder, as well as the `TiltFiveNative.dll` in the root of the repository.
 
