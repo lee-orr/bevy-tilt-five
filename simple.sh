@@ -1,0 +1,1 @@
+cargo watch -d 2 -s "cargo run --example simple"

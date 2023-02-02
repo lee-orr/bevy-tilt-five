@@ -147,6 +147,9 @@ impl T5Client {
                 op::<_, 100>(|| self.bridge.t5InitGlassesGraphicsContext(value, *api, *ctx))?;
             }
 
+            let config = T5_WandStreamConfig { enabled: true };
+            op::<_, 100>(|| self.bridge.t5ConfigureWandStreamForGlasses(value, &config))?;
+
             let id: String = glasses_id.to_owned();
             self.glasses.insert(id.clone(), value);
             Ok(Glasses(id))
@@ -155,7 +158,14 @@ impl T5Client {
 
     pub fn release_glasses(&mut self, glasses: Glasses) -> Result<()> {
         if let Some(glasses) = self.glasses.remove(&glasses.0) {
-            unsafe { op::<_, 100>(|| self.bridge.t5ReleaseGlasses(glasses)) }
+            unsafe {
+                let config = T5_WandStreamConfig { enabled: false };
+                op::<_, 100>(|| {
+                    self.bridge
+                        .t5ConfigureWandStreamForGlasses(glasses, &config)
+                })?;
+                op::<_, 100>(|| self.bridge.t5ReleaseGlasses(glasses))
+            }
         } else {
             Ok(())
         }
@@ -173,6 +183,32 @@ impl T5Client {
                     )
                 })?;
                 Ok(pose.assume_init())
+            }
+        } else {
+            bail!("Couldn't find glasses");
+        }
+    }
+
+    pub fn get_wand_stream_events(&mut self, glasses: &Glasses) -> Result<Vec<T5_WandStreamEvent>> {
+        if let Some(glasses) = self.glasses.get(&glasses.0) {
+            unsafe {
+                let mut events = vec![];
+
+                loop {
+                    let mut event = MaybeUninit::uninit();
+                    let result = op::<_, 1>(|| {
+                        self.bridge
+                            .t5ReadWandStreamForGlasses(*glasses, event.as_mut_ptr(), 1)
+                    });
+                    if !result.is_ok() {
+                        break;
+                    }
+                    let event = event.assume_init();
+
+                    events.push(event);
+                }
+
+                Ok(events)
             }
         } else {
             bail!("Couldn't find glasses");

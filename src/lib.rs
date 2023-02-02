@@ -28,7 +28,7 @@ use bevy::{
     utils::HashMap,
 };
 use bridge::{
-    ffi::{T5_Quat, T5_Vec3},
+    ffi::{T5_Quat, T5_Vec3, T5_WandReport},
     *,
 };
 
@@ -159,6 +159,23 @@ pub enum TiltFiveClientEvent {
     GlassesConnected(String),
     GlassesDisconnected(String),
     GlassesPoseChanged(String, Transform, f32, Transform),
+    WandConnected {
+        glasses: String,
+        wand_id: String,
+    },
+    WandDisconnected {
+        glasses: String,
+        wand_id: String,
+    },
+    WandDesync {
+        glasses: String,
+        wand_id: String,
+    },
+    WantReportUpdated {
+        glasses: String,
+        wand_id: String,
+        report: T5_WandReport,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
