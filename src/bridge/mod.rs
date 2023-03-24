@@ -65,6 +65,7 @@ impl T5Client {
             let version = CString::new(version)?;
             let bridge = TiltFiveNative::new("TiltFiveNative.dll")?;
             let mut ctx = MaybeUninit::uninit();
+            let mut platform = MaybeUninit::uninit();
             let info = T5_ClientInfo {
                 applicationId: app_id.as_ptr(),
                 applicationVersion: version.as_ptr(),
@@ -72,7 +73,7 @@ impl T5Client {
                 reserved: 0u64,
             };
             op::<_, 100>(|| {
-                bridge.t5CreateContext(ctx.as_mut_ptr(), &info, std::ptr::null::<u64>())
+                bridge.t5CreateContext(ctx.as_mut_ptr(), &info, platform.as_mut_ptr())
             })?;
 
             let ctx = ctx.assume_init();

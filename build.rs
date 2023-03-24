@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
-    println!("cargo:rerun-if-changed=t5-sdk/include/include/TiltFiveNative.h");
+    println!("cargo:rerun-if-changed=t5-sdk/include/TiltFiveNative.h");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
@@ -13,7 +13,7 @@ fn main() {
     let bindings = bindgen::Builder::default()
         // The input header we would like to generate
         // bindings for.
-        .header("t5-sdk/include/include/TiltFiveNative.h")
+        .header("t5-sdk/include/TiltFiveNative.h")
         .dynamic_library_name("TiltFiveNative")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
