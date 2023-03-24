@@ -199,7 +199,7 @@ fn setup_board_transformer(mut commands: Commands, boards: Query<Entity, Added<B
     for entity in boards.iter() {
         commands.entity(entity).with_children(|p| {
             p.spawn((BoardTransformer, SpatialBundle::default()))
-                .with_children(|p| {
+                .with_children(|_p| {
                     // p.spawn((
                     //     SpatialBundle {
                     //         transform: Transform::from_rotation(Quat::from_rotation_x(
@@ -570,7 +570,7 @@ fn set_glasses_position(
     }
 }
 
-fn setup_debug_meshes(mut commands: Commands, query: Query<Entity, Added<TiltFiveGlasses>>) {
+fn setup_debug_meshes(_commands: Commands, _query: Query<Entity, Added<TiltFiveGlasses>>) {
     // for entity in query.iter() {
     //     commands.entity(entity).with_children(|p| {
     //         p.spawn((

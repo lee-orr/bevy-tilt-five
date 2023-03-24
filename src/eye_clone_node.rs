@@ -2,10 +2,7 @@ use std::num::NonZeroU32;
 
 use bevy::{
     prelude::Image,
-    render::{
-        render_asset::{RenderAssets},
-        render_graph::Node,
-    },
+    render::{render_asset::RenderAssets, render_graph::Node},
 };
 use wgpu::{ImageCopyBuffer, ImageDataLayout};
 

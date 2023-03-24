@@ -190,6 +190,7 @@ impl T5Client {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_wand_stream_events(&mut self, glasses: &Glasses) -> Result<Vec<T5_WandStreamEvent>> {
         if let Some(glasses) = self.glasses.get(&glasses.0) {
             unsafe {
@@ -201,7 +202,7 @@ impl T5Client {
                         self.bridge
                             .t5ReadWandStreamForGlasses(*glasses, event.as_mut_ptr(), 1)
                     });
-                    if !result.is_ok() {
+                    if result.is_err() {
                         break;
                     }
                     let event = event.assume_init();
