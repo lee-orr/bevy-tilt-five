@@ -11,10 +11,10 @@ use std::{
     ffi::{c_char, c_void, CStr, CString},
     mem::MaybeUninit,
     thread,
-    time::Duration,
+    time::Duration, fmt::Display,
 };
 
-use bevy::prelude::{Quat, Vec2, Vec3};
+use bevy::{prelude::{Quat, Vec2, Vec3}, reflect::{Reflect, FromReflect}};
 use ffi::*;
 
 use anyhow::{bail, Result};
@@ -23,12 +23,49 @@ pub struct T5Client {
     app: String,
     bridge: TiltFiveNative,
     ctx: T5_Context,
-    glasses: HashMap<String, T5_Glasses>,
+    glasses: HashMap<Glasses, T5_Glasses>,
     graphics_context: Option<(T5_GraphicsApi, *mut c_void)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Reflect, FromReflect)]
 pub struct Glasses(String);
+
+impl From<String> for Glasses {
+    fn from(value: String) -> Self {
+        Glasses(value)
+    }
+}
+
+impl From<&str> for Glasses {
+    fn from(value: &str) -> Self {
+        Glasses(value.to_string())
+    }
+}
+
+
+impl From<Glasses> for String {
+    fn from(value: Glasses) -> Self {
+        value.0
+    }
+}
+
+impl<'a> From<&'a Glasses> for &'a str {
+    fn from(value: &'a Glasses) -> Self {
+        &value.0
+    }
+}
+
+impl From<&Glasses> for String {
+    fn from(value: &Glasses) -> Self {
+        value.0.clone()
+    }
+}
+
+impl Display for Glasses {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 pub const DEFAULT_GLASSES_WIDTH: u32 = 1216;
 pub const DEFAULT_GLASSES_HEIGHT: u32 = 768;
@@ -108,7 +145,7 @@ impl T5Client {
         }
     }
 
-    pub fn list_glasses(&mut self) -> Result<Vec<String>> {
+    pub fn list_glasses(&mut self) -> Result<Vec<Glasses>> {
         let mut result = vec![];
         unsafe {
             let mut buffer = [c_char::MIN; 1024];
@@ -127,9 +164,10 @@ impl T5Client {
         Ok(result)
     }
 
-    pub fn create_glasses(&mut self, glasses_id: &str) -> Result<Glasses> {
+    pub fn create_glasses(&mut self, glasses_id: &Glasses) -> Result<Glasses> {
         unsafe {
-            let id = CString::new(glasses_id)?;
+            let id: &str = glasses_id.into();
+            let id = CString::new(id)?;
             let mut glasses = MaybeUninit::uninit();
             op::<_, 100>(|| {
                 self.bridge
@@ -149,16 +187,16 @@ impl T5Client {
             }
 
             let config = T5_WandStreamConfig { enabled: true };
-            op::<_, 100>(|| self.bridge.t5ConfigureWandStreamForGlasses(value, &config))?;
+            op::<_, 100>(|| self.bridge.t5ConfigureWandStreamForGlasses(value.into(), &config))?;
 
-            let id: String = glasses_id.to_owned();
+            let id: Glasses = glasses_id.clone();
             self.glasses.insert(id.clone(), value);
-            Ok(Glasses(id))
+            Ok(id)
         }
     }
 
     pub fn release_glasses(&mut self, glasses: Glasses) -> Result<()> {
-        if let Some(glasses) = self.glasses.remove(&glasses.0) {
+        if let Some(glasses) = self.glasses.remove(&glasses) {
             unsafe {
                 let config = T5_WandStreamConfig { enabled: false };
                 op::<_, 100>(|| {
@@ -173,7 +211,7 @@ impl T5Client {
     }
 
     pub fn get_glasses_pose(&mut self, glasses: &Glasses) -> Result<T5_GlassesPose> {
-        if let Some(glasses) = self.glasses.get(&glasses.0) {
+        if let Some(glasses) = self.glasses.get(&glasses) {
             unsafe {
                 let mut pose = MaybeUninit::uninit();
                 op::<_, 1>(|| {
@@ -192,7 +230,7 @@ impl T5Client {
 
     #[allow(dead_code)]
     pub fn get_wand_stream_events(&mut self, glasses: &Glasses) -> Result<Vec<T5_WandStreamEvent>> {
-        if let Some(glasses) = self.glasses.get(&glasses.0) {
+        if let Some(glasses) = self.glasses.get(&glasses) {
             unsafe {
                 let mut events = vec![];
 
@@ -222,7 +260,7 @@ impl T5Client {
         id: &Glasses,
         info: *const T5_FrameInfo,
     ) -> Result<()> {
-        if let Some(glasses) = self.glasses.get(&id.0) {
+        if let Some(glasses) = self.glasses.get(&id) {
             op::<_, 1>(|| self.bridge.t5SendFrameToGlasses(*glasses, info))
         } else {
             bail!("couldn't find glasses");
@@ -234,7 +272,7 @@ impl T5Client {
     }
 
     pub fn get_ipd(&mut self, id: &Glasses) -> Result<f32> {
-        if let Some(glasses) = self.glasses.get(&id.0) {
+        if let Some(glasses) = self.glasses.get(&id) {
             unsafe {
                 let mut ipd = MaybeUninit::uninit();
                 op::<_, 1>(|| {

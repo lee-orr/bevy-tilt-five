@@ -94,7 +94,7 @@ fn connect_glasses(
     egui::Window::new("T5 Status").show(ctx, |ui| {
         ui.label("Available Glasses:");
         for (key, val) in glasses.glasses.iter() {
-            if val.is_none() && ui.button(key).clicked() {
+            if val.is_none() && ui.button(Into::<&str>::into(key)).clicked() {
                 events.send(TiltFiveCommands::ConnectToGlasses(key.clone()));
             }
         }
@@ -109,8 +109,8 @@ fn connect_glasses(
                 ui.image(*right, [121.6, 76.8]);
             });
 
-            if ui.button(*key).clicked() {
-                events.send(TiltFiveCommands::DisconnectFromGlasses(key.to_string()));
+            if ui.button(Into::<&str>::into(*key)).clicked() {
+                events.send(TiltFiveCommands::DisconnectFromGlasses(key.to_owned().clone()));
             }
         }
         if ui.button("Refresh List").clicked() {

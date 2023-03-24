@@ -33,6 +33,7 @@ use bridge::{
 };
 
 pub use bridge::T5GameboardType;
+pub use bridge::Glasses;
 use wgpu::{BufferDescriptor, BufferUsages, MapMode};
 
 use crate::conversions::transform_matrix_from_bevy_to_glasses_space;
@@ -125,7 +126,7 @@ type GlassesMapData = (
 
 #[derive(Resource)]
 struct T5RenderGlassesList {
-    glasses: HashMap<String, GlassesMapData>,
+    glasses: HashMap<Glasses, GlassesMapData>,
 }
 
 #[derive(Bundle, Default)]
@@ -141,7 +142,7 @@ type GlassesInfo = (Entity, Handle<Image>, Handle<Image>);
 
 #[derive(Resource, Reflect, Debug, Default, Clone, ExtractResource)]
 pub struct AvailableGlasses {
-    pub glasses: HashMap<String, Option<GlassesInfo>>,
+    pub glasses: HashMap<Glasses, Option<GlassesInfo>>,
 }
 
 #[derive(Component)]
@@ -155,24 +156,24 @@ impl Default for Board {
 
 #[derive(Debug, Clone)]
 pub enum TiltFiveClientEvent {
-    GlassesFound(Vec<String>),
-    GlassesConnected(String),
-    GlassesDisconnected(String),
-    GlassesPoseChanged(String, Transform, f32, Transform),
+    GlassesFound(Vec<Glasses>),
+    GlassesConnected(Glasses),
+    GlassesDisconnected(Glasses),
+    GlassesPoseChanged(Glasses, Transform, f32, Transform),
     WandConnected {
-        glasses: String,
+        glasses: Glasses,
         wand_id: String,
     },
     WandDisconnected {
-        glasses: String,
+        glasses: Glasses,
         wand_id: String,
     },
     WandDesync {
-        glasses: String,
+        glasses: Glasses,
         wand_id: String,
     },
     WantReportUpdated {
-        glasses: String,
+        glasses: Glasses,
         wand_id: String,
         report: T5_WandReport,
     },
@@ -181,13 +182,13 @@ pub enum TiltFiveClientEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TiltFiveCommands {
     RefreshGlassesList,
-    ConnectToGlasses(String),
-    DisconnectFromGlasses(String),
-    SetGlassesImages(String, Handle<Image>, Handle<Image>),
+    ConnectToGlasses(Glasses),
+    DisconnectFromGlasses(Glasses),
+    SetGlassesImages(Glasses, Handle<Image>, Handle<Image>),
 }
 
 #[derive(Component)]
-struct TiltFiveGlasses(Option<(String, Handle<Image>, Handle<Image>)>);
+struct TiltFiveGlasses(Option<(Glasses, Handle<Image>, Handle<Image>)>);
 
 #[derive(Component)]
 struct TiltFiveIPD(f32);
