@@ -32,8 +32,8 @@ use bridge::{
     *,
 };
 
-pub use bridge::T5GameboardType;
 pub use bridge::Glasses;
+pub use bridge::T5GameboardType;
 use wgpu::{BufferDescriptor, BufferUsages, MapMode};
 
 use crate::conversions::transform_matrix_from_bevy_to_glasses_space;

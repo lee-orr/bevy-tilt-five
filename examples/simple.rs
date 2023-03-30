@@ -110,7 +110,9 @@ fn connect_glasses(
             });
 
             if ui.button(Into::<&str>::into(*key)).clicked() {
-                events.send(TiltFiveCommands::DisconnectFromGlasses(key.to_owned().clone()));
+                events.send(TiltFiveCommands::DisconnectFromGlasses(
+                    key.to_owned().clone(),
+                ));
             }
         }
         if ui.button("Refresh List").clicked() {

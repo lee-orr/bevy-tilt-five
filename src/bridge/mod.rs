@@ -164,7 +164,7 @@ impl T5Client {
             loop {
                 let ptr = start.add(offset);
                 let buffer = CStr::from_ptr(ptr);
-                offset = buffer.to_bytes_with_nul().len() + offset;
+                offset += buffer.to_bytes_with_nul().len();
                 let value = buffer.to_str();
                 if let Ok(value) = value {
                     if !value.is_empty() {
@@ -205,7 +205,7 @@ impl T5Client {
             let config = T5_WandStreamConfig { enabled: true };
             op::<_, 100>(|| {
                 self.bridge
-                    .t5ConfigureWandStreamForGlasses(value.into(), &config)
+                    .t5ConfigureWandStreamForGlasses(value, &config)
             })?;
 
             let id: Glasses = glasses_id.clone();
@@ -230,7 +230,7 @@ impl T5Client {
     }
 
     pub fn get_glasses_pose(&mut self, glasses: &Glasses) -> Result<T5_GlassesPose> {
-        if let Some(glasses) = self.glasses.get(&glasses) {
+        if let Some(glasses) = self.glasses.get(glasses) {
             unsafe {
                 let mut pose = MaybeUninit::uninit();
                 op::<_, 1>(|| {
@@ -249,7 +249,7 @@ impl T5Client {
 
     #[allow(dead_code)]
     pub fn get_wand_stream_events(&mut self, glasses: &Glasses) -> Result<Vec<T5_WandStreamEvent>> {
-        if let Some(glasses) = self.glasses.get(&glasses) {
+        if let Some(glasses) = self.glasses.get(glasses) {
             unsafe {
                 let mut events = vec![];
 
@@ -279,7 +279,7 @@ impl T5Client {
         id: &Glasses,
         info: *const T5_FrameInfo,
     ) -> Result<()> {
-        if let Some(glasses) = self.glasses.get(&id) {
+        if let Some(glasses) = self.glasses.get(id) {
             op::<_, 1>(|| self.bridge.t5SendFrameToGlasses(*glasses, info))
         } else {
             bail!("couldn't find glasses");
@@ -291,7 +291,7 @@ impl T5Client {
     }
 
     pub fn get_ipd(&mut self, id: &Glasses) -> Result<f32> {
-        if let Some(glasses) = self.glasses.get(&id) {
+        if let Some(glasses) = self.glasses.get(id) {
             unsafe {
                 let mut ipd = MaybeUninit::uninit();
                 op::<_, 1>(|| {
