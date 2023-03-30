@@ -9,12 +9,16 @@ pub mod ffi {
 use std::{
     collections::HashMap,
     ffi::{c_char, c_void, CStr, CString},
+    fmt::Display,
     mem::MaybeUninit,
     thread,
-    time::Duration, fmt::Display,
+    time::Duration,
 };
 
-use bevy::{prelude::{Quat, Vec2, Vec3}, reflect::{Reflect, FromReflect}};
+use bevy::{
+    prelude::{Quat, Vec2, Vec3},
+    reflect::{FromReflect, Reflect},
+};
 use ffi::*;
 
 use anyhow::{bail, Result};
@@ -41,7 +45,6 @@ impl From<&str> for Glasses {
         Glasses(value.to_string())
     }
 }
-
 
 impl From<Glasses> for String {
     fn from(value: Glasses) -> Self {
@@ -155,10 +158,23 @@ impl T5Client {
                     .t5ListGlasses(self.ctx, buffer.as_mut_ptr(), &mut num_glasses)
             })?;
 
-            let buffer = CStr::from_ptr(buffer.as_ptr());
-            let value = buffer.to_str()?;
-            if !value.is_empty() {
-                result.push(value.into());
+            let mut offset = 0;
+            let start = buffer.as_ptr();
+
+            loop {
+                let ptr = start.add(offset);
+                let buffer = CStr::from_ptr(ptr);
+                offset = buffer.to_bytes_with_nul().len() + offset;
+                let value = buffer.to_str();
+                if let Ok(value) = value {
+                    if !value.is_empty() {
+                        result.push(value.into());
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
         }
         Ok(result)
@@ -187,7 +203,10 @@ impl T5Client {
             }
 
             let config = T5_WandStreamConfig { enabled: true };
-            op::<_, 100>(|| self.bridge.t5ConfigureWandStreamForGlasses(value.into(), &config))?;
+            op::<_, 100>(|| {
+                self.bridge
+                    .t5ConfigureWandStreamForGlasses(value.into(), &config)
+            })?;
 
             let id: Glasses = glasses_id.clone();
             self.glasses.insert(id.clone(), value);
