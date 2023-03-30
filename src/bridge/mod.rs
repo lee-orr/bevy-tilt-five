@@ -149,13 +149,13 @@ impl T5Client {
     }
 
     pub fn list_glasses(&mut self) -> Result<Vec<Glasses>> {
-        let mut result = vec![];
         unsafe {
+            let mut tmp = vec![];
             let mut buffer = [c_char::MIN; 1024];
-            let mut num_glasses = 1024;
+            let mut buffer_size = 1024;
             op::<_, 1>(|| {
                 self.bridge
-                    .t5ListGlasses(self.ctx, buffer.as_mut_ptr(), &mut num_glasses)
+                    .t5ListGlasses(self.ctx, buffer.as_mut_ptr(), &mut buffer_size)
             })?;
 
             let mut offset = 0;
@@ -168,7 +168,7 @@ impl T5Client {
                 let value = buffer.to_str();
                 if let Ok(value) = value {
                     if !value.is_empty() {
-                        result.push(value.into());
+                        tmp.push(Into::<Glasses>::into(value));
                     } else {
                         break;
                     }
@@ -176,11 +176,12 @@ impl T5Client {
                     break;
                 }
             }
+
+            Ok(tmp)
         }
-        Ok(result)
     }
 
-    pub fn create_glasses(&mut self, glasses_id: &Glasses) -> Result<Glasses> {
+    pub fn create_glasses(&mut self, glasses_id: &Glasses) -> Result<(Glasses, Option<String>)> {
         unsafe {
             let id: &str = glasses_id.into();
             let id = CString::new(id)?;
@@ -203,14 +204,14 @@ impl T5Client {
             }
 
             let config = T5_WandStreamConfig { enabled: true };
-            op::<_, 100>(|| {
-                self.bridge
-                    .t5ConfigureWandStreamForGlasses(value, &config)
-            })?;
+            op::<_, 100>(|| self.bridge.t5ConfigureWandStreamForGlasses(value, &config))?;
 
             let id: Glasses = glasses_id.clone();
             self.glasses.insert(id.clone(), value);
-            Ok(id)
+
+            let friendly_name = self.get_glasses_name(&id).ok();
+
+            Ok((id, friendly_name))
         }
     }
 
@@ -304,6 +305,34 @@ impl T5Client {
                 })?;
                 let ipd = ipd.assume_init() as f32;
                 Ok(ipd)
+            }
+        } else {
+            bail!("couldn't find glasses");
+        }
+    }
+
+    pub fn get_glasses_name(&mut self, id: &Glasses) -> Result<String> {
+        if let Some(glasses) = self.glasses.get(id) {
+            unsafe {
+                let mut buffer = [c_char::MIN; 1024];
+                let mut buffer_size = 1024;
+                op::<_, 1>(|| {
+                    self.bridge.t5GetGlassesUtf8Param(
+                        *glasses,
+                        0,
+                        T5_ParamGlasses_kT5_ParamGlasses_UTF8_FriendlyName,
+                        buffer.as_mut_ptr(),
+                        &mut buffer_size,
+                    )
+                })?;
+                let ptr = buffer.as_ptr();
+                let buffer = CStr::from_ptr(ptr);
+                let value = buffer.to_str()?;
+                if !value.is_empty() {
+                    Ok(value.to_string())
+                } else {
+                    bail!("couldn't get name");
+                }
             }
         } else {
             bail!("couldn't find glasses");

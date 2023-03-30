@@ -138,11 +138,35 @@ pub struct BoardBundle {
 #[derive(Component)]
 struct BoardTransformer;
 
-type GlassesInfo = (Entity, Handle<Image>, Handle<Image>);
+#[derive(Resource, Reflect, Debug, Default, Clone, FromReflect)]
+pub enum GlassesInfo {
+    #[default]
+    Disconnected,
+    Connected {
+        friendly_name: Option<String>,
+        entity: Entity,
+        left: Handle<Image>,
+        right: Handle<Image>,
+    },
+}
+
+impl GlassesInfo {
+    pub fn is_disconnected(&self) -> bool {
+        match self {
+            GlassesInfo::Disconnected => true,
+            GlassesInfo::Connected {
+                friendly_name: _,
+                entity: _,
+                left: _,
+                right: _,
+            } => false,
+        }
+    }
+}
 
 #[derive(Resource, Reflect, Debug, Default, Clone, ExtractResource)]
 pub struct AvailableGlasses {
-    pub glasses: HashMap<Glasses, Option<GlassesInfo>>,
+    pub glasses: HashMap<Glasses, GlassesInfo>,
 }
 
 #[derive(Component)]
@@ -157,7 +181,7 @@ impl Default for Board {
 #[derive(Debug, Clone)]
 pub enum TiltFiveClientEvent {
     GlassesFound(Vec<Glasses>),
-    GlassesConnected(Glasses),
+    GlassesConnected(Glasses, Option<String>),
     GlassesDisconnected(Glasses),
     GlassesPoseChanged(Glasses, Transform, f32, Transform),
     WandConnected {
@@ -306,12 +330,14 @@ fn process_commands(
             }
             TiltFiveCommands::ConnectToGlasses(glasses_id) => {
                 if !list.glasses.contains_key(&glasses_id) {
-                    if let Ok(glasses) = client.client.create_glasses(&glasses_id) {
+                    if let Ok((glasses, friendly_name)) = client.client.create_glasses(&glasses_id)
+                    {
                         list.glasses
                             .insert(glasses_id.clone(), (glasses, None, None, None));
-                        let _ = client
-                            .sender
-                            .send(TiltFiveClientEvent::GlassesConnected(glasses_id));
+                        let _ = client.sender.send(TiltFiveClientEvent::GlassesConnected(
+                            glasses_id,
+                            friendly_name,
+                        ));
                     }
                 }
             }
@@ -348,7 +374,7 @@ fn update_glasses_list(
         if let TiltFiveClientEvent::GlassesFound(new_list) = evt {
             for glasses in new_list.iter() {
                 if !list.glasses.contains_key(glasses) {
-                    list.glasses.insert(glasses.clone(), None);
+                    list.glasses.insert(glasses.clone(), GlassesInfo::default());
                 }
             }
             break;
@@ -363,57 +389,59 @@ fn connect_to_glasses(
     mut assets: ResMut<Assets<Image>>,
 ) {
     for evt in events.iter() {
-        if let TiltFiveClientEvent::GlassesConnected(glasses_id) = evt {
-            if let Some(value) = list.glasses.get(glasses_id) {
-                if value.is_none() {
-                    let mut left = Image {
-                        texture_descriptor: TextureDescriptor {
-                            label: None,
-                            size: GLASSES_TEXTURE_SIZE,
-                            dimension: TextureDimension::D2,
-                            format: TEXTURE_FORMAT,
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            usage: TextureUsages::TEXTURE_BINDING
-                                | TextureUsages::COPY_DST
-                                | TextureUsages::RENDER_ATTACHMENT
-                                | TextureUsages::COPY_SRC,
-                        },
-                        ..default()
-                    };
-                    left.resize(GLASSES_TEXTURE_SIZE);
-                    let mut right = Image {
-                        texture_descriptor: TextureDescriptor {
-                            label: None,
-                            size: GLASSES_TEXTURE_SIZE,
-                            dimension: TextureDimension::D2,
-                            format: TEXTURE_FORMAT,
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            usage: TextureUsages::TEXTURE_BINDING
-                                | TextureUsages::COPY_DST
-                                | TextureUsages::RENDER_ATTACHMENT
-                                | TextureUsages::COPY_SRC,
-                        },
-                        ..default()
-                    };
-                    right.resize(GLASSES_TEXTURE_SIZE);
+        if let TiltFiveClientEvent::GlassesConnected(glasses_id, friendly_name) = evt {
+            if let Some(GlassesInfo::Disconnected) = list.glasses.get(glasses_id) {
+                let friendly_name = friendly_name.clone();
+                let mut left = Image {
+                    texture_descriptor: TextureDescriptor {
+                        label: None,
+                        size: GLASSES_TEXTURE_SIZE,
+                        dimension: TextureDimension::D2,
+                        format: TEXTURE_FORMAT,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        usage: TextureUsages::TEXTURE_BINDING
+                            | TextureUsages::COPY_DST
+                            | TextureUsages::RENDER_ATTACHMENT
+                            | TextureUsages::COPY_SRC,
+                    },
+                    ..default()
+                };
+                left.resize(GLASSES_TEXTURE_SIZE);
+                let mut right = Image {
+                    texture_descriptor: TextureDescriptor {
+                        label: None,
+                        size: GLASSES_TEXTURE_SIZE,
+                        dimension: TextureDimension::D2,
+                        format: TEXTURE_FORMAT,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        usage: TextureUsages::TEXTURE_BINDING
+                            | TextureUsages::COPY_DST
+                            | TextureUsages::RENDER_ATTACHMENT
+                            | TextureUsages::COPY_SRC,
+                    },
+                    ..default()
+                };
+                right.resize(GLASSES_TEXTURE_SIZE);
 
-                    let left = assets.add(left);
-                    let right = assets.add(right);
-                    let entity = commands
-                        .spawn((
-                            SpatialBundle::default(),
-                            TiltFiveGlasses(Some((
-                                glasses_id.clone(),
-                                left.clone(),
-                                right.clone(),
-                            ))),
-                        ))
-                        .id();
-                    list.glasses
-                        .insert(glasses_id.clone(), Some((entity, left, right)));
-                }
+                let left = assets.add(left);
+                let right = assets.add(right);
+                let entity = commands
+                    .spawn((
+                        SpatialBundle::default(),
+                        TiltFiveGlasses(Some((glasses_id.clone(), left.clone(), right.clone()))),
+                    ))
+                    .id();
+                list.glasses.insert(
+                    glasses_id.clone(),
+                    GlassesInfo::Connected {
+                        entity,
+                        left,
+                        right,
+                        friendly_name,
+                    },
+                );
             }
         }
     }
@@ -426,10 +454,17 @@ fn disconnect_from_glasses(
 ) {
     for evt in events.iter() {
         if let TiltFiveClientEvent::GlassesDisconnected(glasses_id) = evt {
-            if let Some(Some((entity, _, _))) = list.glasses.get(glasses_id) {
+            if let Some(GlassesInfo::Connected {
+                entity,
+                left: _,
+                right: _,
+                friendly_name: _,
+            }) = list.glasses.get(glasses_id)
+            {
                 commands.entity(*entity).despawn_recursive();
             }
-            list.glasses.insert(glasses_id.clone(), None);
+            list.glasses
+                .insert(glasses_id.clone(), GlassesInfo::Disconnected);
         }
     }
 }
@@ -562,7 +597,13 @@ fn set_glasses_position(
 ) {
     for event in events.iter() {
         if let TiltFiveClientEvent::GlassesPoseChanged(id, transform, ipd, _) = event {
-            if let Some(Some((entity, _, _))) = list.glasses.get(id) {
+            if let Some(GlassesInfo::Connected {
+                entity,
+                left: _,
+                right: _,
+                friendly_name: _,
+            }) = list.glasses.get(id)
+            {
                 commands
                     .entity(*entity)
                     .insert((*transform, TiltFiveIPD(*ipd)));

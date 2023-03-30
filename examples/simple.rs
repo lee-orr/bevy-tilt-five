@@ -8,7 +8,7 @@ use bevy_inspector_egui::{
     quick::WorldInspectorPlugin,
 };
 use bevy_tilt_five::{
-    AvailableGlasses, BoardBundle, DebugGizmo, TiltFiveClientEvent, TiltFiveCommands,
+    AvailableGlasses, BoardBundle, DebugGizmo, GlassesInfo, TiltFiveClientEvent, TiltFiveCommands,
     TiltFivePlugin,
 };
 
@@ -77,13 +77,25 @@ fn connect_glasses(
         .glasses
         .iter()
         .filter_map(|(name, val)| {
-            if let Some((_, left, right)) = val {
+            if let GlassesInfo::Connected {
+                entity: _,
+                left,
+                right,
+                friendly_name,
+            } = val
+            {
+                let label = if let Some(label) = friendly_name.as_ref() {
+                    label.as_str()
+                } else {
+                    Into::<&str>::into(name)
+                };
                 Some((
                     name,
                     (
                         egui_context.add_image(left.clone_weak()),
                         egui_context.add_image(right.clone_weak()),
                     ),
+                    label,
                 ))
             } else {
                 None
@@ -94,13 +106,21 @@ fn connect_glasses(
     egui::Window::new("T5 Status").show(ctx, |ui| {
         ui.label("Available Glasses:");
         for (key, val) in glasses.glasses.iter() {
-            if val.is_none() && ui.button(Into::<&str>::into(key)).clicked() {
+            let label = Into::<&str>::into(key);
+            if val.is_disconnected() && ui.button(label).clicked() {
                 events.send(TiltFiveCommands::ConnectToGlasses(key.clone()));
             }
         }
         ui.label("Connected Glasses:");
-        for (key, images) in connected_glasses.iter() {
+        for (key, images, label) in connected_glasses.iter() {
             let (left, right) = images;
+            ui.label(*label);
+
+            if ui.button("Disconnect...").clicked() {
+                events.send(TiltFiveCommands::DisconnectFromGlasses(
+                    key.to_owned().clone(),
+                ));
+            }
 
             ui.horizontal(|ui| {
                 ui.label("left");
@@ -108,12 +128,6 @@ fn connect_glasses(
                 ui.label("right");
                 ui.image(*right, [121.6, 76.8]);
             });
-
-            if ui.button(Into::<&str>::into(*key)).clicked() {
-                events.send(TiltFiveCommands::DisconnectFromGlasses(
-                    key.to_owned().clone(),
-                ));
-            }
         }
         if ui.button("Refresh List").clicked() {
             events.send(TiltFiveCommands::RefreshGlassesList);
