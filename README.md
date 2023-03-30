@@ -24,7 +24,7 @@ To run the example, first clone the repository and make sure you have the most r
 - Once it's done compiling, a window will pop up showing the test scene.
 - In the window, in the T5 Status popup, click "Refresh List". A string ID for your connected glasses should show up.
 - Click the button for your glasses - you may need to repeat this if it fails to connect.
-- Once they are connected, you'll see two previews of what the glasses are showing in the panel, and a button with the ID below it.
+- Once they are connected, you'll see a new section titled with the glasses friendly name (or ID if no name is available), a preview of what the glasses are showing for each eye, and a disconnect button.
 - Put on the glasses and test things out.
 - When the glasses detect the board, they will output position and rotation information as well.
 - To disconnect, click the glasses ID button again.
