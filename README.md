@@ -4,7 +4,7 @@ This is an initial attempt at a plugin providing support for the [Tilt Five](htt
 
 It is very much a work in progress, and so far is barely functional even in the little functionality that does exist.
 
-Currently, it can render images to a single pair of Tilt Five glasses using DX11. The tracking of the headset is currently still broken, and no thought has gone into implementing the wand input yet. However, the goal is to provide full support for multiple headsets & their inputs.
+Currently, it can render images to multiple pairs of Tilt Five glasses using DX11 (tested up to 4) - but doesn't yet have any wand support.
 
 ## Licensing
 The library itself is dual licensed under either:
