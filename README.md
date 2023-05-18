@@ -17,7 +17,7 @@ However, the Tilt Five provided files from their SDK are licensed under a separa
 ## Running the example
 First - this only supports windows ATM.
 
-To run the example, first clone the repository and make sure you have the most recent version of [Rust](https://www.rust-lang.org/) installed. Once you installed rust and connected your glasses to your computer, you are good to go.
+To run the example, first clone the repository and make sure you have the most recent version of [Rust](https://www.rust-lang.org/) installed as well as the requirements for [bindgen](https://github.com/rust-lang/rust-bindgen/blob/master/book/src/requirements.md#clang). Once you installed rust and connected your glasses to your computer, you are good to go.
 
 - open a terminal window in repo's directory
 - run `cargo run --example simple`
